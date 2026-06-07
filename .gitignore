@@ -1,0 +1,15 @@
+# 拦截 Python 运行脂肪
+__pycache__/
+*.pyc
+
+# 拦截虚拟环境沙盒（我们只备份源码，不备份依赖库）
+pet_env/
+venv/
+
+# 拦截 Nuitka 编译产生的庞大 C++ 构建垃圾和最终的 exe 产物
+*.build/
+*.dist/
+*.exe
+
+# 拦截本地测试时的临时记忆账本（保护女仆的隐私）
+memory.json
