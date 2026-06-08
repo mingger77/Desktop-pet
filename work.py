@@ -1,11 +1,77 @@
 """根据 JSON 数据生成 Office 文档（PPT / Word / Excel / PDF）。"""
 
 import os
+import json
 from pptx import Presentation
 from pptx.util import Inches
 from docx import Document
 from openpyxl import Workbook
 from fpdf import FPDF
+
+
+# OpenAI function calling 工具定义
+GENERATE_DOC_TOOL = {
+    "type": "function",
+    "function": {
+        "name": "generate_document",
+        "description": "根据结构化数据生成 Office 文档（PPT / Word / Excel / PDF）并保存到桌面",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "type": {
+                    "type": "string",
+                    "enum": ["pptx", "docx", "xlsx", "pdf"],
+                    "description": "文档类型"
+                },
+                "title": {
+                    "type": "string",
+                    "description": "文档标题"
+                },
+                "content": {
+                    "type": "array",
+                    "description": "文档内容，每项包含 heading 和 body",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "heading": {"type": "string"},
+                            "body": {"type": "string"}
+                        },
+                        "required": ["heading", "body"]
+                    }
+                }
+            },
+            "required": ["type", "title", "content"]
+        }
+    }
+}
+
+
+def handle_tool_call(tool_call, output_dir=None):
+    """执行工具调用，返回结果消息。
+    output_dir: 输出目录，默认使用桌面。"""
+    name = tool_call.function.name
+    if name == "generate_document":
+        args = json.loads(tool_call.function.arguments)
+        base_dir = output_dir or os.path.expanduser("~")
+        output_path = os.path.join(base_dir, args.get("title", "文档"))
+        try:
+            result_path = generate_document(args, output_path)
+            return {
+                "role": "tool",
+                "tool_call_id": tool_call.id,
+                "content": f"文档已生成: {result_path}",
+            }
+        except Exception as e:
+            return {
+                "role": "tool",
+                "tool_call_id": tool_call.id,
+                "content": f"生成失败: {str(e)}",
+            }
+    return {
+        "role": "tool",
+        "tool_call_id": tool_call.id,
+        "content": f"未知工具: {name}",
+    }
 
 
 def generate_pptx(data, output_path):

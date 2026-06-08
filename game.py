@@ -96,8 +96,7 @@ class GameMixin:
         dialog.exec()
 
     def _on_player_choice(self, player_choice, dialog):
-        """玩家做出选择：关闭对话框，宠物随机出拳并展示 1.5 秒。"""
-        dialog.accept()
+        """玩家做出选择：宠物随机出拳并展示 1.5 秒，对话框保持打开。"""
         self._player_choice = player_choice
         pet_choice = random.choice(["stone", "scissors", "paper"])
         self._change_state(pet_choice)
@@ -110,7 +109,8 @@ class GameMixin:
         if self.state in ("stone", "scissors", "paper"):
             self._show_game_result()
         elif self.state in ("win", "lose", "draw"):
-            self._end_game()
+            # 结果展示完毕，回到可爱状态等待下一轮
+            self._change_state("cute")
 
     def _show_game_result(self):
         """判定胜负并展示结果状态 2 秒。"""

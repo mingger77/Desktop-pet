@@ -219,7 +219,8 @@ class DanceCustomizeDialog(QDialog):
         if len(poses) < 3:
             QMessageBox.warning(self, "提示", "请至少选择 3 个动作")
             return
-        self._result = ("save", poses, 0)
+        loops = self._spin_loops.value()
+        self._result = ("save", poses, loops)
         self.accept()
 
     def _position_near_parent(self):
@@ -277,16 +278,57 @@ class DanceMixin:
     # ============================== 模式 B：已保存的舞蹈 ==============================
 
     def _show_saved_dances(self):
-        """显示已保存的舞蹈列表。返回 True 回到选择器，False 表示已播放。"""
+        """显示已保存的舞蹈列表（翻页式）。返回 True 回到选择器，False 表示已播放。"""
         dances = self._load_saved_dances()
         if not dances:
-            msg = QMessageBox(self)
-            msg.setWindowTitle("提示")
-            msg.setText("还没有保存的舞蹈哦，请先在定制舞蹈中保存吧 (｡•́︿•̀｡)")
-            msg.exec()
-            return True  # 返回选择器
+            dialog = QDialog(self)
+            dialog.setWindowTitle("提示")
+            dialog.setWindowFlags(Qt.WindowType.Dialog | Qt.WindowType.FramelessWindowHint)
+            dialog.setAttribute(Qt.WidgetAttribute.WA_StyledBackground)
+            dialog.setStyleSheet("""
+                QDialog {
+                    background: #FFF0F5;
+                    border: 2px solid #FF69B4;
+                    border-radius: 12px;
+                }
+                QLabel {
+                    color: #8B4513;
+                    font-size: 14px;
+                }
+                QPushButton {
+                    padding: 8px 24px;
+                    border: 1px solid #FF69B4;
+                    border-radius: 6px;
+                    background: white;
+                    color: #FF69B4;
+                    font-size: 13px;
+                }
+                QPushButton:hover {
+                    background: #FFE4EC;
+                }
+            """)
+            lay = QVBoxLayout(dialog)
+            lay.setContentsMargins(30, 30, 30, 30)
+            msg = QLabel("主人，您没有给女仆酱定制舞蹈呦")
+            msg.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            msg.setStyleSheet("font-size: 15px; color: #FF1493; font-weight: bold;")
+            lay.addWidget(msg)
+            btn_ok = QPushButton("知道了")
+            btn_ok.clicked.connect(dialog.accept)
+            lay.addWidget(btn_ok, alignment=Qt.AlignmentFlag.AlignCenter)
+            dialog.setFixedSize(300, 160)
+            pet_geo = self.frameGeometry()
+            screen = QGuiApplication.primaryScreen().size()
+            x = pet_geo.right() + 10
+            y = pet_geo.top()
+            if y + dialog.height() > screen.height():
+                y = screen.height() - dialog.height()
+            dialog.move(max(0, x), max(0, y))
+            dialog.exec()
+            return True
 
         back_to_selector = [True]
+        current_idx = [0]
 
         dialog = QDialog(self)
         dialog.setWindowTitle("已保存的舞蹈")
@@ -298,14 +340,9 @@ class DanceMixin:
                 border: 2px solid #FF69B4;
                 border-radius: 12px;
             }
-            QLabel, QListWidget {
+            QLabel {
                 color: #8B4513;
-                font-size: 13px;
-            }
-            QListWidget {
-                border: 1px solid #FFB6C1;
-                border-radius: 6px;
-                background: white;
+                font-size: 14px;
             }
             QPushButton {
                 padding: 8px 16px;
@@ -324,21 +361,55 @@ class DanceMixin:
         layout.setSpacing(10)
         layout.setContentsMargins(20, 20, 20, 20)
 
-        label = QLabel("选择要播放的舞蹈：")
-        label.setStyleSheet("font-size: 14px; color: #FF1493; font-weight: bold;")
-        label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(label)
+        title = QLabel("选择要播放的舞蹈：")
+        title.setStyleSheet("font-size: 14px; color: #FF1493; font-weight: bold;")
+        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(title)
 
-        list_widget = QListWidget()
-        for idx, dance in enumerate(dances):
-            names = [p.replace("dance", "动作 ") for p in dance]
-            item = QListWidgetItem(f"舞蹈 {idx + 1}: {' → '.join(names)}")
-            list_widget.addItem(item)
-        layout.addWidget(list_widget)
+        # 舞蹈内容显示区
+        dance_info = QLabel()
+        dance_info.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        dance_info.setStyleSheet("font-size: 13px; color: #8B4513; padding: 15px;"
+                                 "background: white; border-radius: 6px;"
+                                 "border: 1px solid #FFB6C1;")
+        dance_info.setWordWrap(True)
+        layout.addWidget(dance_info)
 
+        # 页码指示
+        page_label = QLabel()
+        page_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        page_label.setStyleSheet("font-size: 12px; color: #999;")
+        layout.addWidget(page_label)
+
+        # 左右翻页按钮
+        nav_layout = QHBoxLayout()
+        btn_prev = QPushButton("◀")
+        btn_next = QPushButton("▶")
+        for b in (btn_prev, btn_next):
+            b.setFixedWidth(50)
+        nav_layout.addStretch()
+        nav_layout.addWidget(btn_prev)
+        nav_layout.addWidget(btn_next)
+        nav_layout.addStretch()
+        layout.addLayout(nav_layout)
+
+        def update_display():
+            dance = dances[current_idx[0]]
+            poses = dance["poses"]
+            loops = dance["loops"]
+            names = " → ".join(p.replace("dance", "动作 ") for p in poses)
+            dance_info.setText(f"舞蹈 {current_idx[0] + 1}\n{names}\n循环次数: {loops} 次")
+            page_label.setText(f"第 {current_idx[0] + 1} / {len(dances)} 个")
+            btn_prev.setVisible(current_idx[0] > 0)
+            btn_next.setVisible(current_idx[0] < len(dances) - 1)
+
+        btn_prev.clicked.connect(lambda: (list.__setitem__(current_idx, 0, current_idx[0] - 1), update_display())[1])
+        btn_next.clicked.connect(lambda: (list.__setitem__(current_idx, 0, current_idx[0] + 1), update_display())[1])
+
+        # 操作按钮
         btn_layout = QHBoxLayout()
-        btn_play = QPushButton("播放选中")
-        btn_delete = QPushButton("删除选中")
+        btn_play = QPushButton("播放")
+        btn_delete = QPushButton("删除")
         btn_back = QPushButton("返回")
         btn_back.setStyleSheet("""
             QPushButton {
@@ -354,41 +425,46 @@ class DanceMixin:
             }
         """)
         btn_play.clicked.connect(
-            lambda: self._on_saved_play(dialog, list_widget, dances, back_to_selector))
+            lambda: self._on_saved_play(dialog, current_idx, dances, back_to_selector))
         btn_delete.clicked.connect(
-            lambda: self._on_saved_delete(list_widget, dances))
+            lambda: self._on_saved_delete(dialog, current_idx, dances, update_display))
         btn_back.clicked.connect(dialog.reject)
         btn_layout.addWidget(btn_play)
         btn_layout.addWidget(btn_delete)
         btn_layout.addWidget(btn_back)
         layout.addLayout(btn_layout)
 
+        update_display()
         dialog.setFixedSize(340, 320)
         pet_geo = self.frameGeometry()
         screen = QGuiApplication.primaryScreen().size()
         x = pet_geo.right() + 10
         y = pet_geo.top()
-        if x + dialog.width() > screen.width():
-            x = pet_geo.left() - dialog.width() - 10
         if y + dialog.height() > screen.height():
             y = screen.height() - dialog.height()
         dialog.move(max(0, x), max(0, y))
         dialog.exec()
         return back_to_selector[0]
 
-    def _on_saved_play(self, dialog, list_widget, dances, back_to_selector):
-        row = list_widget.currentRow()
-        if row >= 0 and row < len(dances):
+    def _on_saved_play(self, dialog, current_idx, dances, back_to_selector):
+        idx = current_idx[0]
+        if 0 <= idx < len(dances):
             back_to_selector[0] = False
             dialog.accept()
-            self._play_dance_sequence(dances[row], 3)
+            dance = dances[idx]
+            self._play_dance_sequence(dance["poses"], dance["loops"])
 
-    def _on_saved_delete(self, list_widget, dances):
-        row = list_widget.currentRow()
-        if row >= 0 and row < len(dances):
-            dances.pop(row)
+    def _on_saved_delete(self, dialog, current_idx, dances, update_display):
+        idx = current_idx[0]
+        if 0 <= idx < len(dances):
+            dances.pop(idx)
             self._save_saved_dances(dances)
-            list_widget.takeItem(row)
+            if not dances:
+                dialog.close()
+                return
+            if current_idx[0] >= len(dances):
+                current_idx[0] = len(dances) - 1
+            update_display()
 
     # ============================== 模式 C：自定义编舞 ==============================
 
@@ -402,15 +478,33 @@ class DanceMixin:
                 self._play_dance_sequence(poses, loops)
                 return False
             elif action == "save":
-                self._save_new_dance(poses)
-                QMessageBox.information(self, "提示", "舞蹈已保存！")
+                self._save_new_dance(poses, loops)
+                d = QDialog(self)
+                d.setWindowFlags(Qt.WindowType.Dialog | Qt.WindowType.FramelessWindowHint)
+                d.setAttribute(Qt.WidgetAttribute.WA_StyledBackground)
+                d.setStyleSheet("QDialog { background: #FFF0F5; border: 2px solid #FF69B4; border-radius: 12px; } QPushButton { padding: 8px 24px; border: 1px solid #FF69B4; border-radius: 6px; background: white; color: #FF69B4; font-size: 13px; } QPushButton:hover { background: #FFE4EC; } QLabel { color: #8B4513; font-size: 14px; }")
+                lay = QVBoxLayout(d)
+                lay.setContentsMargins(30, 30, 30, 30)
+                lbl = QLabel("主人，女仆酱已经记住这个舞蹈啦")
+                lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                lbl.setStyleSheet("font-size: 15px; color: #FF1493; font-weight: bold;")
+                lay.addWidget(lbl)
+                ok_btn = QPushButton("好的")
+                ok_btn.clicked.connect(d.accept)
+                lay.addWidget(ok_btn, alignment=Qt.AlignmentFlag.AlignCenter)
+                d.setFixedSize(300, 160)
+                pet_geo = self.frameGeometry()
+                screen = QGuiApplication.primaryScreen().size()
+                d.move(min(pet_geo.right() + 10, screen.width() - d.width()),
+                       min(pet_geo.top(), screen.height() - d.height()))
+                d.exec()
                 return True
         return True  # 取消也回到选择器
 
-    def _save_new_dance(self, poses):
-        """保存舞蹈到已保存列表（最多 3 个）。"""
+    def _save_new_dance(self, poses, loops=3):
+        """保存舞蹈（含循环次数）到已保存列表（最多 3 个）。"""
         dances = self._load_saved_dances()
-        dances.append(poses)
+        dances.append({"poses": poses, "loops": loops})
         if len(dances) > 3:
             dances.pop(0)
         self._save_saved_dances(dances)
@@ -453,7 +547,12 @@ class DanceMixin:
         try:
             with open(_CONFIG_FILE, "r", encoding="utf-8") as f:
                 data = json.load(f)
-            return data.get("saved_dances", [])
+            dances = data.get("saved_dances", [])
+            # 向后兼容：旧格式是纯列表，转为 dict
+            return [
+                {"poses": d, "loops": 3} if isinstance(d, list) else d
+                for d in dances
+            ]
         except (json.JSONDecodeError, OSError):
             return []
 

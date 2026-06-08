@@ -2,14 +2,13 @@ import os
 import json
 import queue
 import threading
-import urllib.request
-import urllib.error
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout,
                                 QPushButton, QLabel, QLineEdit,
                                 QTextEdit, QFileDialog, QMessageBox)
-from work import generate_document
 from PySide6.QtGui import QGuiApplication
+from openai import OpenAI
+from work import generate_document, GENERATE_DOC_TOOL, handle_tool_call
 
 
 SYSTEM_PROMPT = """角色定义
@@ -41,6 +40,33 @@ SYSTEM_PROMPT = """角色定义
 
 请以"女仆酱已就位，随时为您服务 (｡♥‿♥｡)"作为开场白。"""
 
+_TUTORIAL_PAGES = [
+    "1. 主人需要先访问 DeepSeek 开发者平台，网址是：https://platform.deepseek.com，要将网址复制然后粘贴到浏览器呦",
+    "2. 点击页面右上角的“Sign In”或者“登录”按钮，选择“注册新账号”，用主人的邮箱和密码完成注册就好呢。注册完成后记得去邮箱里点击验证链接，这样账号才算真正激活哦（不然女仆酱也没法帮主人继续下一步呢）～",
+    "3. 一定要完成实名认证， 这一步很重要很重要，如果没有完成实名认证是无法创建 API Key 的，系统只对认证通过的账户开放密钥创建权限呢",
+    "4. 登录后，点击右上角头像 → \"账号设置\" → \"实名认证\"",
+    "5. 选择 \"个人认证\" （如果主人是以企业身份注册，就选\"企业认证\"～）",
+    "6. 按照提示上传 身份证正反面照片，填写真实姓名和身份证号，然后完成人脸识别或短信验证",
+    "7. 提交后大约需要 1–3个工作日 审核，认证通过后页面会显示绿色的\"已通过\"标识",
+    "8. 等认证通过，主人就可以继续下一步啦！",
+    "9. 认证通过后，主人的 API Key 就可以生成啦～这个密钥就像是打开 API 服务的\"门禁卡\"，一定要小心保管哦！",
+    "10. 进入左侧导航栏，点击 \"API管理\"→\"API Keys\"",
+    "11. 点击 \"Create new secret key\" 按钮",
+    "12. 在弹窗中为密钥起一个名字，小暖建议用\"项目名_环境\"的格式，比如\"myapp_production\"～这样以后管理起来特别清晰呢",
+    "13. 点击确定后，系统会生成以 sk- 开头的密钥字符串",
+    "14. 女仆酱的小tip:这个密钥只在生成时显示一次，关闭窗口后就再也看不到啦！主人在页面跳转前一定要立刻复制并保存在安全的地方，比如加密文件或密码管理器里。如果不小心弄丢了也没关系，重新创建一个新的就好，旧密钥失效即可～",
+    "15. DeepSeek 采用预付费模式——就像给手机卡充话费一样，需要先充值才能调用 API 呢(｡•ᴗ•｡)。没有余额的话请求会返回 402 错误哦～",
+    "16. 登录开发者平台，点击右上角头像 → \"账户余额\"或直接点左侧\"充值中心\"",
+    "17. 点击\"立即充值\"，选择金额档位——最低单笔 ¥10 元，大约对应 10 万 Token 的调用额度",
+    "18. 支付方式支持 微信支付、支付宝和银行转账～微信和支付宝是即时到账的，银行转账可能会慢一些",
+    "19. 确认订单后点击\"去支付\"，扫码完成就行啦～",
+    "20. 女仆酱的小tip：支付成功后系统通常会在 1–3 分钟 内更新余额，主人在\"用量中心\"页面可以看到实时余额和使用情况哦～小暖还建议主人在控制台 开启余额预警 功能，这样就不会因为突然没钱而中断调用啦",
+    "21. 女仆酱的小tip：目前 DeepSeek 的价格相当实惠呢！以 deepseek-v4-flash 模型为例：\n    输入（缓存未命中）：1 元 / 百万 Token\n    输出：2 元 / 百万 Token\n    输入（缓存命中）：仅 0.02 元 / 百万 Token（超便宜！）\n    主人日常使用记账、笔记之类的小对话，消耗的 Token 其实非常非常少呢～充值 10 元可以用很久很久哦！",
+    "22. 充值完成后，建议主人在 \"开始聊天\" 界面处向我说：\"女仆酱\"，如果我回复了，就说明一切正常～",
+    "23. 如果返回正常的话，就说明完全 OK 啦！(≧▽≦)",
+    "24. 主人如果后续需要详细阅读 API 文档，可以参考官方地址：https://api-docs.deepseek.com/zh-cn/，里面有完整的技术说明和代码示例呢～",
+]
+
 
 class ChatMixin:
     """AI 聊天与配置管理混入类。"""
@@ -52,8 +78,8 @@ class ChatMixin:
     def _load_config(self):
         """加载 API 配置，文件不存在时创建默认配置。"""
         self._api_key = ""
-        self._base_url = "https://api.openai.com/v1"
-        self._model = "gpt-3.5-turbo"
+        self._base_url = "https://api.deepseek.com"
+        self._model = "deepseek-v4-flash"
         if os.path.exists(self._CONFIG_FILE):
             try:
                 with open(self._CONFIG_FILE, "r", encoding="utf-8") as f:
@@ -216,26 +242,54 @@ class ChatMixin:
         layout.addWidget(hint)
 
         layout.addWidget(QLabel("API Key："))
+        key_layout = QHBoxLayout()
         input_key = QLineEdit()
+        key_visible = [False]
         if edit_mode and self._api_key:
             masked = self._api_key[:6] + "******"
             input_key.setText(masked)
             input_key.setPlaceholderText(masked)
+            input_key.setEchoMode(QLineEdit.EchoMode.Password)
         else:
             input_key.setEchoMode(QLineEdit.EchoMode.Password)
             input_key.setPlaceholderText("sk-...")
-        layout.addWidget(input_key)
+        key_layout.addWidget(input_key)
+        btn_toggle = QPushButton("显示")
+        btn_toggle.setFixedWidth(50)
+        btn_toggle.setStyleSheet("""
+            QPushButton {
+                padding: 4px 8px; border: 1px solid #FFB6C1;
+                border-radius: 4px; background: white;
+                color: #FF69B4; font-size: 12px;
+            }
+            QPushButton:hover { background: #FFE4EC; }
+        """)
+        def toggle_key():
+            key_visible[0] = not key_visible[0]
+            if key_visible[0]:
+                if edit_mode:
+                    input_key.setText(self._api_key)
+                input_key.setEchoMode(QLineEdit.EchoMode.Normal)
+                btn_toggle.setText("隐藏")
+            else:
+                if edit_mode and self._api_key:
+                    input_key.setText(self._api_key[:6] + "******")
+                input_key.setEchoMode(QLineEdit.EchoMode.Password)
+                btn_toggle.setText("显示")
+        btn_toggle.clicked.connect(toggle_key)
+        key_layout.addWidget(btn_toggle)
+        layout.addLayout(key_layout)
 
         layout.addWidget(QLabel("Base URL："))
         input_url = QLineEdit()
         input_url.setText(self._base_url)
-        input_url.setPlaceholderText("https://api.openai.com/v1")
+        input_url.setPlaceholderText("https://api.deepseek.com")
         layout.addWidget(input_url)
 
         layout.addWidget(QLabel("Model："))
         input_model = QLineEdit()
         input_model.setText(self._model)
-        input_model.setPlaceholderText("gpt-3.5-turbo")
+        input_model.setPlaceholderText("deepseek-v4-flash")
         layout.addWidget(input_model)
 
         btn_layout = QHBoxLayout()
@@ -245,6 +299,11 @@ class ChatMixin:
         btn_layout.addWidget(btn_save)
         btn_layout.addWidget(btn_cancel)
         layout.addLayout(btn_layout)
+
+        link = QPushButton("不懂点击这里")
+        link.setStyleSheet("QPushButton { color: #4169E1; font-size: 11px; border: none; background: transparent; text-decoration: underline; } QPushButton:hover { color: #6495ED; }")
+        link.clicked.connect(lambda: self._show_tutorial(dialog))
+        layout.addWidget(link, alignment=Qt.AlignmentFlag.AlignCenter)
 
         btn_save.clicked.connect(lambda: self._on_config_saved(
             input_key.text().strip(), input_url.text().strip(),
@@ -353,15 +412,75 @@ class ChatMixin:
         self._chat_input.returnPressed.connect(self._send_message)
         btn_send = QPushButton("发送")
         btn_send.clicked.connect(self._send_message)
-        btn_work = QPushButton("工作模式")
-        btn_work.clicked.connect(self._work_mode)
-        btn_close = QPushButton("关闭")
-        btn_close.clicked.connect(self._close_chat)
         input_layout.addWidget(self._chat_input)
         input_layout.addWidget(btn_send)
-        input_layout.addWidget(btn_work)
-        input_layout.addWidget(btn_close)
         layout.addLayout(input_layout)
+
+        # 底部按钮行：工作模式、联网模式、位置配置、关闭
+        btn_layout = QHBoxLayout()
+        btn_style_on = ("QPushButton { padding: 6px 10px; border: 1px solid #FF69B4;"
+                        " border-radius: 6px; background: #FFB6C1; color: black;"
+                        " font-size: 12px; }")
+        btn_style_off = ("QPushButton { padding: 6px 10px; border: 1px solid #ccc;"
+                         " border-radius: 6px; background: white; color: black;"
+                         " font-size: 12px; }")
+        btn_hover = " QPushButton:hover { background: #F5F5F5; }"
+
+        # 工作模式
+        btn_work_mode = QPushButton("工作模式")
+        btn_work_mode.setStyleSheet(btn_style_off + btn_hover)
+        self._work_mode_enabled = False
+
+        def toggle_work_mode():
+            self._work_mode_enabled = not self._work_mode_enabled
+            btn_work_mode.setStyleSheet(
+                (btn_style_on if self._work_mode_enabled else btn_style_off) + btn_hover)
+        btn_work_mode.clicked.connect(toggle_work_mode)
+        btn_layout.addWidget(btn_work_mode)
+
+        # 联网模式
+        btn_web = QPushButton("联网模式")
+        btn_web.setStyleSheet(btn_style_off + btn_hover)
+        self._web_search_enabled = False
+
+        def toggle_web():
+            self._web_search_enabled = not self._web_search_enabled
+            btn_web.setStyleSheet(
+                (btn_style_on if self._web_search_enabled else btn_style_off) + btn_hover)
+        btn_web.clicked.connect(toggle_web)
+        btn_layout.addWidget(btn_web)
+
+        # 位置配置：从配置文件加载保存的路径，否则默认桌面
+        saved_dir = self._load_saved_output_dir()
+        self._output_dir = saved_dir if os.path.isdir(saved_dir) else os.path.expanduser("~")
+        btn_location = QPushButton("位置配置")
+        btn_location.setStyleSheet(btn_style_off + btn_hover)
+
+        def choose_location():
+            chosen = QFileDialog.getExistingDirectory(
+                self._chat_dialog, "选择文件保存位置", self._output_dir)
+            if chosen:
+                self._output_dir = chosen
+                self._save_output_dir(chosen)
+                short = os.path.basename(chosen)
+                btn_location.setText(f"📁 {short}")
+        btn_location.clicked.connect(choose_location)
+        btn_layout.addWidget(btn_location)
+
+        # 关闭
+        btn_close = QPushButton("关闭")
+        btn_close.setStyleSheet("""
+            QPushButton {
+                padding: 6px 10px; border: 1px solid #ccc;
+                border-radius: 6px; background: white;
+                color: #999; font-size: 12px;
+            }
+            QPushButton:hover { background: #F5F5F5; }
+        """)
+        btn_close.clicked.connect(self._close_chat)
+        btn_layout.addWidget(btn_close)
+
+        layout.addLayout(btn_layout)
 
         self._chat_dialog = dialog
         self._chat_messages = [{"role": "system", "content": SYSTEM_PROMPT}]
@@ -376,6 +495,15 @@ class ChatMixin:
         msg = self._chat_input.text().strip()
         if not msg:
             return
+
+        # 工作模式开启时检查输出目录是否有效
+        if self._work_mode_enabled and not os.path.isdir(self._output_dir):
+            chosen = QFileDialog.getExistingDirectory(
+                self._chat_dialog, "选择文件保存位置", os.path.expanduser("~"))
+            if chosen:
+                self._output_dir = chosen
+                self._save_output_dir(chosen)
+
         self._chat_input.clear()
         self._chat_display.append(f"主人：{msg}")
         self._chat_display.append("")
@@ -383,36 +511,80 @@ class ChatMixin:
         self._chat_display.append("女仆酱：思考中...")
         threading.Thread(target=self._do_api_request, daemon=True).start()
 
-    def _do_api_request(self):
-        """在后台线程中调用 OpenAI 兼容 API。"""
+    def _resolve_output_dir(self):
+        """返回用户设定的输出目录。"""
+        return self._output_dir
+
+    def _load_saved_output_dir(self):
+        """从配置文件加载保存的输出目录。"""
         try:
-            data = json.dumps({
+            with open(self._CONFIG_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            return data.get("output_dir", "")
+        except (json.JSONDecodeError, OSError):
+            return ""
+
+    def _save_output_dir(self, path):
+        """保存输出目录到配置文件。"""
+        try:
+            with open(self._CONFIG_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            data["output_dir"] = path
+            with open(self._CONFIG_FILE, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2)
+        except OSError:
+            pass
+
+    def _do_api_request(self):
+        """使用 OpenAI SDK 调用 API（非流式），支持工具调用。"""
+        try:
+            client = OpenAI(api_key=self._api_key, base_url=self._base_url)
+
+            kwargs = {
                 "model": self._model,
-                "messages": self._chat_messages
-            }).encode("utf-8")
-            req = urllib.request.Request(
-                f"{self._base_url}/chat/completions",
-                data=data,
-                headers={
-                    "Authorization": f"Bearer {self._api_key}",
-                    "Content-Type": "application/json",
-                }
-            )
-            with urllib.request.urlopen(req, timeout=180) as resp:
-                result = json.loads(resp.read().decode("utf-8"))
-            reply = result["choices"][0]["message"]["content"]
-            self._chat_messages.append({"role": "assistant", "content": reply})
+                "messages": self._chat_messages,
+            }
+            if self._work_mode_enabled:
+                kwargs["tools"] = [GENERATE_DOC_TOOL]
+            if self._web_search_enabled:
+                kwargs["extra_body"] = {"web_search": True}
+
+            resp = client.chat.completions.create(**kwargs)
+            msg = resp.choices[0].message
+
+            # 如果有工具调用，先确定输出目录，再执行
+            if msg.tool_calls:
+                self._chat_messages.append({
+                    "role": "assistant",
+                    "content": msg.content or None,
+                    "tool_calls": [
+                        {"id": tc.id, "type": "function",
+                         "function": {"name": tc.function.name, "arguments": tc.function.arguments}}
+                        for tc in msg.tool_calls
+                    ],
+                })
+                output_dir = self._resolve_output_dir()
+                for tc in msg.tool_calls:
+                    self._chat_messages.append(handle_tool_call(tc, output_dir))
+
+                # 第二轮：非流式获取最终回复
+                resp2 = client.chat.completions.create(
+                    model=self._model,
+                    messages=self._chat_messages,
+                )
+                reply = resp2.choices[0].message.content or ""
+                self._chat_messages.append({"role": "assistant", "content": reply})
+            else:
+                reply = msg.content or ""
+                self._chat_messages.append({"role": "assistant", "content": reply})
+
             self._reply_queue.put(reply)
-        except urllib.error.HTTPError as e:
-            error_body = e.read().decode("utf-8", errors="replace")
-            self._reply_queue.put(
-                f"啊哦，出错了呢 (｡•́︿•̀｡) HTTP {e.code}: {error_body}")
+
         except Exception as e:
-            self._reply_queue.put(
-                f"啊哦，出错了呢 (｡•́︿•̀｡) {str(e)}")
+            self._reply_queue.put(f"啊哦，出错了呢 (｡•́︿•̀｡) {str(e)}")
 
     def _on_api_reply(self, text):
-        """在 UI 中显示 API 回复。"""
+        """在 UI 中显示完整 API 回复。"""
         self._chat_display.append(f"女仆酱：{text}")
         self._chat_display.append("")
 
@@ -422,6 +594,218 @@ class ChatMixin:
         self._chat_dialog = None
         self._change_state("stand")
         self._idle_timer.start(600_000)
+
+    # ============================== 高级设置 ==============================
+
+    def _show_advanced_settings(self):
+        """弹出高级设置对话框（联网模式 / 工作模式 / 返回）。"""
+        dialog = QDialog(self._chat_dialog)
+        dialog.setWindowTitle("高级设置")
+        dialog.setWindowFlags(Qt.WindowType.Dialog | Qt.WindowType.FramelessWindowHint)
+        dialog.setAttribute(Qt.WidgetAttribute.WA_StyledBackground)
+        dialog.setStyleSheet("""
+            QDialog {
+                background: #FFF0F5;
+                border: 2px solid #FF69B4;
+                border-radius: 12px;
+                padding: 10px;
+            }
+            QPushButton {
+                padding: 10px 30px;
+                border: 1px solid #ccc;
+                border-radius: 8px;
+                background: white;
+                color: black;
+                font-size: 14px;
+                min-width: 160px;
+            }
+            QPushButton:hover {
+                background: #F5F5F5;
+            }
+        """)
+
+        layout = QVBoxLayout(dialog)
+        layout.setSpacing(12)
+        layout.setContentsMargins(20, 20, 20, 20)
+
+        label = QLabel("高级设置")
+        label.setStyleSheet("font-size: 15px; color: #FF1493; font-weight: bold;")
+        label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(label)
+
+        # 联网模式按钮
+        btn_web = QPushButton("联网模式")
+        if self._web_search_enabled:
+            btn_web.setStyleSheet("""
+                QPushButton {
+                    padding: 10px 30px; border: 1px solid #FF69B4;
+                    border-radius: 8px; background: #FFB6C1;
+                    color: black; font-size: 14px; min-width: 160px;
+                }
+            """)
+        layout.addWidget(btn_web)
+
+        def toggle_web():
+            self._web_search_enabled = not self._web_search_enabled
+            if self._web_search_enabled:
+                btn_web.setStyleSheet("""
+                    QPushButton {
+                        padding: 10px 30px; border: 1px solid #FF69B4;
+                        border-radius: 8px; background: #FFB6C1;
+                        color: black; font-size: 14px; min-width: 160px;
+                    }
+                """)
+            else:
+                btn_web.setStyleSheet("""
+                    QPushButton {
+                        padding: 10px 30px; border: 1px solid #ccc;
+                        border-radius: 8px; background: white;
+                        color: black; font-size: 14px; min-width: 160px;
+                    }
+                """)
+        btn_web.clicked.connect(toggle_web)
+
+        # 工作模式按钮
+        btn_work_mode = QPushButton("工作模式")
+        if self._work_mode_enabled:
+            btn_work_mode.setStyleSheet("""
+                QPushButton {
+                    padding: 10px 30px; border: 1px solid #FF69B4;
+                    border-radius: 8px; background: #FFB6C1;
+                    color: black; font-size: 14px; min-width: 160px;
+                }
+            """)
+        layout.addWidget(btn_work_mode)
+
+        def toggle_work_mode():
+            self._work_mode_enabled = not self._work_mode_enabled
+            if self._work_mode_enabled:
+                btn_work_mode.setStyleSheet("""
+                    QPushButton {
+                        padding: 10px 30px; border: 1px solid #FF69B4;
+                        border-radius: 8px; background: #FFB6C1;
+                        color: black; font-size: 14px; min-width: 160px;
+                    }
+                """)
+            else:
+                btn_work_mode.setStyleSheet("""
+                    QPushButton {
+                        padding: 10px 30px; border: 1px solid #ccc;
+                        border-radius: 8px; background: white;
+                        color: black; font-size: 14px; min-width: 160px;
+                    }
+                """)
+        btn_work_mode.clicked.connect(toggle_work_mode)
+
+        # 返回按钮
+        btn_back = QPushButton("返回")
+        btn_back.setStyleSheet("""
+            QPushButton {
+                padding: 8px 20px; border: 1px solid #ccc;
+                border-radius: 6px; background: white;
+                color: #999; font-size: 13px; min-width: 100px;
+            }
+            QPushButton:hover { background: #F5F5F5; }
+        """)
+        btn_back.clicked.connect(dialog.accept)
+        layout.addWidget(btn_back, alignment=Qt.AlignmentFlag.AlignCenter)
+
+        dialog.setFixedSize(220, 260)
+        pet_geo = self._chat_dialog.frameGeometry() if self._chat_dialog else self.frameGeometry()
+        screen = QGuiApplication.primaryScreen().size()
+        x = pet_geo.right() + 10
+        y = pet_geo.top()
+        if y + dialog.height() > screen.height():
+            y = screen.height() - dialog.height()
+        dialog.move(max(0, x), max(0, y))
+        dialog.exec()
+
+    # ============================== 教程 ==============================
+
+    def _show_tutorial(self, parent_dialog=None):
+        """显示 24 页教程对话框。"""
+        dialog = QDialog(parent_dialog or self)
+        dialog.setWindowTitle("教程")
+        dialog.setWindowFlags(Qt.WindowType.Dialog | Qt.WindowType.FramelessWindowHint)
+        dialog.setAttribute(Qt.WidgetAttribute.WA_StyledBackground)
+        dialog.setStyleSheet("""
+            QDialog {
+                background: #FFF0F5;
+                border: 2px solid #FF69B4;
+                border-radius: 12px;
+            }
+            QTextEdit {
+                border: 1px solid #FFB6C1;
+                border-radius: 6px;
+                background: white;
+                color: black;
+                font-size: 13px;
+                padding: 8px;
+            }
+            QPushButton {
+                padding: 8px 20px;
+                border: 1px solid #FF69B4;
+                border-radius: 6px;
+                background: white;
+                color: #FF69B4;
+                font-size: 13px;
+            }
+            QPushButton:hover {
+                background: #FFE4EC;
+            }
+            QPushButton:disabled {
+                border-color: #ccc;
+                color: #ccc;
+            }
+        """)
+
+        layout = QVBoxLayout(dialog)
+        layout.setSpacing(10)
+        layout.setContentsMargins(20, 20, 20, 20)
+
+        title = QLabel("教程")
+        title.setStyleSheet("font-size: 16px; color: #FF1493; font-weight: bold;")
+        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(title)
+
+        text_edit = QTextEdit()
+        text_edit.setReadOnly(True)
+        text_edit.setMaximumHeight(300)
+        layout.addWidget(text_edit)
+
+        nav_layout = QHBoxLayout()
+        btn_prev = QPushButton("上一页")
+        btn_next = QPushButton("下一页")
+        page_label = QLabel("第 1 / 24 页")
+        page_label.setStyleSheet("color: #8B4513; font-size: 13px;")
+        nav_layout.addWidget(btn_prev)
+        nav_layout.addStretch()
+        nav_layout.addWidget(page_label)
+        nav_layout.addStretch()
+        nav_layout.addWidget(btn_next)
+        layout.addLayout(nav_layout)
+
+        current_page = [0]
+
+        def show_page():
+            text_edit.setPlainText(_TUTORIAL_PAGES[current_page[0]])
+            page_label.setText(f"第 {current_page[0] + 1} / {len(_TUTORIAL_PAGES)} 页")
+            btn_prev.setEnabled(current_page[0] > 0)
+            is_last = current_page[0] == len(_TUTORIAL_PAGES) - 1
+            btn_next.setText("完成" if is_last else "下一页")
+
+        btn_prev.clicked.connect(
+            lambda: (list.__setitem__(current_page, 0, current_page[0] - 1), show_page()))
+        btn_next.clicked.connect(
+            lambda: dialog.accept() if current_page[0] == len(_TUTORIAL_PAGES) - 1
+            else (list.__setitem__(current_page, 0, current_page[0] + 1), show_page()))
+
+        show_page()
+        dialog.setFixedSize(400, 400)
+        screen = QGuiApplication.primaryScreen().size()
+        dialog.move((screen.width() - dialog.width()) // 2,
+                     (screen.height() - dialog.height()) // 2)
+        dialog.exec()
 
     # ============================== 工作模式 ==============================
 
