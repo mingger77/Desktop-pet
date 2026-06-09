@@ -13,17 +13,6 @@
         "dance5",
         "dance6"
       ],
-      "loops": 4
-    },
-    {
-      "poses": [
-        "dance1",
-        "dance2",
-        "dance3",
-        "dance4",
-        "dance5",
-        "dance6"
-      ],
       "loops": 3
     },
     {
@@ -33,7 +22,17 @@
         "dance5"
       ],
       "loops": 2
+    },
+    {
+      "poses": [
+        "dance1",
+        "dance2",
+        "dance4",
+        "dance5",
+        "dance6"
+      ],
+      "loops": 4
     }
   ],
-  "identity": "maid"
+  "identity": "catgirl"
 }
