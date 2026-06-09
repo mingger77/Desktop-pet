@@ -2,6 +2,7 @@ import sys
 import math
 import random
 import os
+import json
 import queue
 from PySide6.QtWidgets import QApplication, QWidget, QMenu
 from PySide6.QtCore import Qt, QTimer, QPoint, QRect
@@ -33,6 +34,7 @@ class DesktopPet(QWidget, DanceMixin, GameMixin, ChatMixin):
         self._chat_dialog = None
         self._chat_messages = []
         self._reply_queue = queue.Queue()
+        self._identity = "maid"
         self._setup_window()
         self._load_images()
         self._init_state()
@@ -57,22 +59,20 @@ class DesktopPet(QWidget, DanceMixin, GameMixin, ChatMixin):
         self._press_pos = None
 
     def _load_images(self):
-        """从 ./images/ 目录加载所有 A--B.png 精灵图到 self.images 字典。"""
+        """按当前身份从 ./images/ 加载精灵图到 self.images 字典。"""
         img_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "images")
         self.images = {}
 
         if not os.path.isdir(img_dir):
             raise FileNotFoundError(f"图片目录不存在: {img_dir}")
 
+        prefix = self._identity + "--"
         loaded = 0
         for fname in os.listdir(img_dir):
-            if not fname.endswith(".png"):
+            if not fname.endswith(".png") or not fname.startswith(prefix):
                 continue
             stem = fname.rsplit(".", 1)[0]
-            parts = stem.split("--")
-            if len(parts) != 2:
-                continue
-            state = parts[1]
+            state = stem.split("--", 1)[1]
             pixmap = QPixmap(os.path.join(img_dir, fname))
             if pixmap.isNull():
                 continue
@@ -221,44 +221,72 @@ class DesktopPet(QWidget, DanceMixin, GameMixin, ChatMixin):
             self._trigger_interaction()
 
     def contextMenuEvent(self, event):
-        """右键菜单：游戏 / 跳舞 / 工作 / 退出。"""
-        menu = QMenu(self)
-        menu.setStyleSheet("""
-            QMenu {
-                background: #FFF8F0;
-                border: 1px solid #DAA520;
-                border-radius: 8px;
-                padding: 4px;
-            }
-            QMenu::item {
-                padding: 6px 24px;
-                border-radius: 4px;
-                font-size: 14px;
-                color: #5D4037;
-            }
-            QMenu::item:selected {
-                background: #FFE4B5;
-            }
-        """)
-        act_game = menu.addAction("游戏")
-        act_dance = menu.addAction("跳舞")
-        act_work = menu.addAction("工作")
-        act_exit = menu.addAction("退出")
+        """右键菜单：循环显示，子页面返回后回到主菜单。"""
+        while True:
+            menu = QMenu(self)
+            menu.setStyleSheet("""
+                QMenu {
+                    background: #FFF8F0;
+                    border: 1px solid #DAA520;
+                    border-radius: 8px;
+                    padding: 4px;
+                }
+                QMenu::item {
+                    padding: 6px 24px;
+                    border-radius: 4px;
+                    font-size: 14px;
+                    color: #5D4037;
+                }
+                QMenu::item:selected {
+                    background: #FFE4B5;
+                }
+            """)
+            act_game = menu.addAction("游戏")
+            act_dance = menu.addAction("跳舞")
+            act_chat = menu.addAction("聊天")
+            act_dress = menu.addAction("换装")
+            act_exit = menu.addAction("退出")
 
-        if self._in_game or self._dance_active or self._chat_dialog is not None:
-            act_game.setEnabled(False)
-            act_dance.setEnabled(False)
-            act_work.setEnabled(False)
+            if self._in_game or self._dance_active or self._chat_dialog is not None:
+                act_game.setEnabled(False)
+                act_dance.setEnabled(False)
+                act_chat.setEnabled(False)
 
-        action = menu.exec(event.globalPos())
-        if action == act_exit:
-            QApplication.quit()
-        elif action == act_game:
-            self._start_game()
-        elif action == act_dance:
-            self._start_dance()
-        elif action == act_work:
-            self._start_work()
+            action = menu.exec(event.globalPos())
+            if action == act_exit:
+                QApplication.quit()
+                break
+            elif action == act_game:
+                self._start_game()
+            elif action == act_dance:
+                self._start_dance()
+            elif action == act_chat:
+                self._start_work()
+            elif action == act_dress:
+                self._switch_identity()
+            else:
+                break  # 点击菜单外退出
+
+            # 聊天对话框已打开时不循环（modeless 对话框）
+            if self._chat_dialog is not None:
+                break
+
+    # ============================== 换装 ==============================
+
+    def _switch_identity(self):
+        """切换女仆/猫娘身份，重载图片并保存配置。"""
+        self._identity = "catgirl" if self._identity == "maid" else "maid"
+        try:
+            with open(self._CONFIG_FILE, "r", encoding="utf-8") as f:
+                config = json.load(f)
+            config["identity"] = self._identity
+            with open(self._CONFIG_FILE, "w", encoding="utf-8") as f:
+                json.dump(config, f, indent=2)
+        except OSError:
+            pass
+        self._load_images()
+        self._init_state()
+        self.update()
 
     # ============================== 绘制 ==============================
 

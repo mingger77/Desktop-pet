@@ -7,6 +7,7 @@ from PySide6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout,
                                 QMessageBox)
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QGuiApplication
+from chat import _THEMES
 
 
 _CONFIG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.json")
@@ -20,29 +21,34 @@ class DanceSelectorDialog(QDialog):
         self._choice = None
         self._setup_ui()
 
+    def _theme(self):
+        t = self.parent()._theme() if hasattr(self.parent(), "_theme") else _THEMES["maid"]
+        return t
+
     def _setup_ui(self):
         self.setWindowTitle("选择跳舞模式")
         self.setWindowFlags(Qt.WindowType.Dialog | Qt.WindowType.FramelessWindowHint)
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground)
-        self.setStyleSheet("""
-            QDialog {
-                background: #FFF0F5;
-                border: 2px solid #FF69B4;
+        t = self._theme()
+        self.setStyleSheet(f"""
+            QDialog {{
+                background: {t['bg']};
+                border: 2px solid {t['border']};
                 border-radius: 12px;
                 padding: 10px;
-            }
-            QPushButton {
+            }}
+            QPushButton {{
                 padding: 10px 20px;
-                border: 1px solid #FF69B4;
+                border: 1px solid {t['border']};
                 border-radius: 8px;
                 background: white;
-                color: #FF69B4;
+                color: {t['btn_text']};
                 font-size: 13px;
                 min-width: 200px;
-            }
-            QPushButton:hover {
+            }}
+            QPushButton:hover {{
                 background: #FFE4EC;
-            }
+            }}
         """)
 
         layout = QVBoxLayout(self)
@@ -50,7 +56,7 @@ class DanceSelectorDialog(QDialog):
         layout.setContentsMargins(20, 20, 20, 20)
 
         label = QLabel("请选择跳舞模式")
-        label.setStyleSheet("font-size: 15px; color: #FF1493; font-weight: bold;")
+        label.setStyleSheet(f"font-size: 15px; color: {t['btn_text']}; font-weight: bold;")
         label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(label)
 
@@ -118,44 +124,49 @@ class DanceCustomizeDialog(QDialog):
         self._result = None
         self._setup_ui()
 
+    def _theme(self):
+        t = self.parent()._theme() if hasattr(self.parent(), "_theme") else _THEMES["maid"]
+        return t
+
     def _setup_ui(self):
+        t = self._theme()
         self.setWindowTitle("自定义舞蹈")
         self.setWindowFlags(Qt.WindowType.Dialog | Qt.WindowType.FramelessWindowHint)
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground)
-        self.setStyleSheet("""
-            QDialog {
-                background: #FFF0F5;
-                border: 2px solid #FF69B4;
+        self.setStyleSheet(f"""
+            QDialog {{
+                background: {t['bg']};
+                border: 2px solid {t['border']};
                 border-radius: 12px;
-            }
-            QLabel {
-                color: #8B4513;
+            }}
+            QLabel {{
+                color: {t['label']};
                 font-size: 13px;
-            }
-            QCheckBox {
-                color: #8B4513;
+            }}
+            QCheckBox {{
+                color: {t['label']};
                 font-size: 13px;
                 spacing: 8px;
-            }
-            QSpinBox {
+            }}
+            QSpinBox {{
                 padding: 4px;
-                border: 1px solid #FFB6C1;
+                border: 1px solid {t['input_border']};
                 border-radius: 4px;
                 background: white;
                 color: black;
                 font-size: 13px;
-            }
-            QPushButton {
+            }}
+            QPushButton {{
                 padding: 8px 20px;
-                border: 1px solid #FF69B4;
+                border: 1px solid {t['border']};
                 border-radius: 6px;
                 background: white;
-                color: #FF69B4;
+                color: {t['btn_text']};
                 font-size: 13px;
-            }
-            QPushButton:hover {
+            }}
+            QPushButton:hover {{
                 background: #FFE4EC;
-            }
+            }}
         """)
 
         layout = QVBoxLayout(self)
@@ -163,7 +174,7 @@ class DanceCustomizeDialog(QDialog):
         layout.setContentsMargins(20, 20, 20, 20)
 
         title = QLabel("请为女仆酱选择舞蹈动作吧（3~6 个）")
-        title.setStyleSheet("font-size: 15px; color: #FF1493; font-weight: bold;")
+        title.setStyleSheet(f"font-size: 15px; color: {t['btn_text']}; font-weight: bold;")
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(title)
 
@@ -252,21 +263,18 @@ class DanceMixin:
     # ============================== 入口 ==============================
 
     def _start_dance(self):
-        """右键菜单入口：弹出跳舞模式选择对话框，返回时回到上一级。"""
-        while True:
-            dialog = DanceSelectorDialog(self)
-            choice = dialog.get_choice()
-            if choice == "random":
-                self._start_random_dance()
-                break
-            elif choice == "saved":
-                if not self._show_saved_dances():
-                    break
-            elif choice == "custom":
-                if not self._start_custom_dance():
-                    break
-            else:
-                break
+        """右键菜单入口：弹出跳舞模式选择对话框，退出时回到主界面。"""
+        dialog = DanceSelectorDialog(self)
+        choice = dialog.get_choice()
+        if choice == "random":
+            self._start_random_dance()
+        elif choice == "saved":
+            self._show_saved_dances()
+        elif choice == "custom":
+            self._start_custom_dance()
+        if not self._dance_active:
+            self._change_state("stand")
+            self._idle_timer.start(600_000)
 
     # ============================== 模式 A：随机跳舞 ==============================
 
@@ -278,40 +286,41 @@ class DanceMixin:
     # ============================== 模式 B：已保存的舞蹈 ==============================
 
     def _show_saved_dances(self):
-        """显示已保存的舞蹈列表（翻页式）。返回 True 回到选择器，False 表示已播放。"""
+        """显示已保存的舞蹈列表（翻页式），关闭后回到主界面。"""
+        t = self._theme()
         dances = self._load_saved_dances()
         if not dances:
             dialog = QDialog(self)
             dialog.setWindowTitle("提示")
             dialog.setWindowFlags(Qt.WindowType.Dialog | Qt.WindowType.FramelessWindowHint)
             dialog.setAttribute(Qt.WidgetAttribute.WA_StyledBackground)
-            dialog.setStyleSheet("""
-                QDialog {
-                    background: #FFF0F5;
-                    border: 2px solid #FF69B4;
+            dialog.setStyleSheet(f"""
+                QDialog {{
+                    background: {t['bg']};
+                    border: 2px solid {t['border']};
                     border-radius: 12px;
-                }
-                QLabel {
-                    color: #8B4513;
+                }}
+                QLabel {{
+                    color: {t['label']};
                     font-size: 14px;
-                }
-                QPushButton {
+                }}
+                QPushButton {{
                     padding: 8px 24px;
-                    border: 1px solid #FF69B4;
+                    border: 1px solid {t['border']};
                     border-radius: 6px;
                     background: white;
-                    color: #FF69B4;
+                    color: {t['btn_text']};
                     font-size: 13px;
-                }
-                QPushButton:hover {
+                }}
+                QPushButton:hover {{
                     background: #FFE4EC;
-                }
+                }}
             """)
             lay = QVBoxLayout(dialog)
             lay.setContentsMargins(30, 30, 30, 30)
             msg = QLabel("主人，您没有给女仆酱定制舞蹈呦")
             msg.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            msg.setStyleSheet("font-size: 15px; color: #FF1493; font-weight: bold;")
+            msg.setStyleSheet(f"font-size: 15px; color: {t['btn_text']}; font-weight: bold;")
             lay.addWidget(msg)
             btn_ok = QPushButton("知道了")
             btn_ok.clicked.connect(dialog.accept)
@@ -325,36 +334,35 @@ class DanceMixin:
                 y = screen.height() - dialog.height()
             dialog.move(max(0, x), max(0, y))
             dialog.exec()
-            return True
+            return
 
-        back_to_selector = [True]
         current_idx = [0]
 
         dialog = QDialog(self)
         dialog.setWindowTitle("已保存的舞蹈")
         dialog.setWindowFlags(Qt.WindowType.Dialog | Qt.WindowType.FramelessWindowHint)
         dialog.setAttribute(Qt.WidgetAttribute.WA_StyledBackground)
-        dialog.setStyleSheet("""
-            QDialog {
-                background: #FFF0F5;
-                border: 2px solid #FF69B4;
+        dialog.setStyleSheet(f"""
+            QDialog {{
+                background: {t['bg']};
+                border: 2px solid {t['border']};
                 border-radius: 12px;
-            }
-            QLabel {
-                color: #8B4513;
+            }}
+            QLabel {{
+                color: {t['label']};
                 font-size: 14px;
-            }
-            QPushButton {
+            }}
+            QPushButton {{
                 padding: 8px 16px;
-                border: 1px solid #FF69B4;
+                border: 1px solid {t['border']};
                 border-radius: 6px;
                 background: white;
-                color: #FF69B4;
+                color: {t['btn_text']};
                 font-size: 13px;
-            }
-            QPushButton:hover {
+            }}
+            QPushButton:hover {{
                 background: #FFE4EC;
-            }
+            }}
         """)
 
         layout = QVBoxLayout(dialog)
@@ -362,16 +370,16 @@ class DanceMixin:
         layout.setContentsMargins(20, 20, 20, 20)
 
         title = QLabel("选择要播放的舞蹈：")
-        title.setStyleSheet("font-size: 14px; color: #FF1493; font-weight: bold;")
+        title.setStyleSheet(f"font-size: 14px; color: {t['btn_text']}; font-weight: bold;")
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(title)
 
         # 舞蹈内容显示区
         dance_info = QLabel()
         dance_info.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        dance_info.setStyleSheet("font-size: 13px; color: #8B4513; padding: 15px;"
+        dance_info.setStyleSheet(f"font-size: 13px; color: {t['label']}; padding: 15px;"
                                  "background: white; border-radius: 6px;"
-                                 "border: 1px solid #FFB6C1;")
+                                 "border: 1px solid {t['input_border']};")
         dance_info.setWordWrap(True)
         layout.addWidget(dance_info)
 
@@ -425,7 +433,7 @@ class DanceMixin:
             }
         """)
         btn_play.clicked.connect(
-            lambda: self._on_saved_play(dialog, current_idx, dances, back_to_selector))
+            lambda: self._on_saved_play(dialog, current_idx, dances))
         btn_delete.clicked.connect(
             lambda: self._on_saved_delete(dialog, current_idx, dances, update_display))
         btn_back.clicked.connect(dialog.reject)
@@ -444,12 +452,10 @@ class DanceMixin:
             y = screen.height() - dialog.height()
         dialog.move(max(0, x), max(0, y))
         dialog.exec()
-        return back_to_selector[0]
 
-    def _on_saved_play(self, dialog, current_idx, dances, back_to_selector):
+    def _on_saved_play(self, dialog, current_idx, dances):
         idx = current_idx[0]
         if 0 <= idx < len(dances):
-            back_to_selector[0] = False
             dialog.accept()
             dance = dances[idx]
             self._play_dance_sequence(dance["poses"], dance["loops"])
@@ -469,25 +475,26 @@ class DanceMixin:
     # ============================== 模式 C：自定义编舞 ==============================
 
     def _start_custom_dance(self):
-        """打开自定义编舞对话框。返回 True 回到选择器，False 表示已播放。"""
+        """打开自定义编舞对话框，关闭后回到主界面。"""
+        t = self._theme()
         dialog = DanceCustomizeDialog(self)
         result = dialog.get_custom_dance()
         if result:
             action, poses, loops = result
             if action == "play":
                 self._play_dance_sequence(poses, loops)
-                return False
             elif action == "save":
-                self._save_new_dance(poses, loops)
+                if not self._save_new_dance(poses, loops):
+                    return
                 d = QDialog(self)
                 d.setWindowFlags(Qt.WindowType.Dialog | Qt.WindowType.FramelessWindowHint)
                 d.setAttribute(Qt.WidgetAttribute.WA_StyledBackground)
-                d.setStyleSheet("QDialog { background: #FFF0F5; border: 2px solid #FF69B4; border-radius: 12px; } QPushButton { padding: 8px 24px; border: 1px solid #FF69B4; border-radius: 6px; background: white; color: #FF69B4; font-size: 13px; } QPushButton:hover { background: #FFE4EC; } QLabel { color: #8B4513; font-size: 14px; }")
+                d.setStyleSheet(f"QDialog {{ background: {t['bg']}; border: 2px solid {t['border']}; border-radius: 12px; }} QPushButton {{ padding: 8px 24px; border: 1px solid {t['border']}; border-radius: 6px; background: white; color: {t['btn_text']}; font-size: 13px; }} QPushButton:hover {{ background: #FFE4EC; }} QLabel {{ color: {t['label']}; font-size: 14px; }}")
                 lay = QVBoxLayout(d)
                 lay.setContentsMargins(30, 30, 30, 30)
                 lbl = QLabel("主人，女仆酱已经记住这个舞蹈啦")
                 lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-                lbl.setStyleSheet("font-size: 15px; color: #FF1493; font-weight: bold;")
+                lbl.setStyleSheet(f"font-size: 15px; color: {t['btn_text']}; font-weight: bold;")
                 lay.addWidget(lbl)
                 ok_btn = QPushButton("好的")
                 ok_btn.clicked.connect(d.accept)
@@ -498,16 +505,72 @@ class DanceMixin:
                 d.move(min(pet_geo.right() + 10, screen.width() - d.width()),
                        min(pet_geo.top(), screen.height() - d.height()))
                 d.exec()
-                return True
-        return True  # 取消也回到选择器
 
     def _save_new_dance(self, poses, loops=3):
-        """保存舞蹈（含循环次数）到已保存列表（最多 3 个）。"""
+        """保存舞蹈（含循环次数）到已保存列表（最多 3 个）。返回 True 表示已保存。"""
+        t = self._theme()
         dances = self._load_saved_dances()
-        dances.append({"poses": poses, "loops": loops})
-        if len(dances) > 3:
+        if len(dances) >= 3:
+            dialog = QDialog(self)
+            dialog.setWindowTitle("提示")
+            dialog.setWindowFlags(Qt.WindowType.Dialog | Qt.WindowType.FramelessWindowHint)
+            dialog.setAttribute(Qt.WidgetAttribute.WA_StyledBackground)
+            dialog.setStyleSheet(f"""
+                QDialog {{
+                    background: {t['bg']};
+                    border: 2px solid {t['border']};
+                    border-radius: 12px;
+                }}
+                QLabel {{
+                    color: {t['label']};
+                    font-size: 14px;
+                }}
+                QPushButton {{
+                    padding: 8px 24px;
+                    border: 1px solid {t['border']};
+                    border-radius: 6px;
+                    background: white;
+                    color: {t['btn_text']};
+                    font-size: 13px;
+                }}
+                QPushButton:hover {{
+                    background: #FFE4EC;
+                }}
+            """)
+            lay = QVBoxLayout(dialog)
+            lay.setSpacing(15)
+            lay.setContentsMargins(30, 30, 30, 30)
+            msg = QLabel("是否让女仆酱记住这支舞蹈")
+            msg.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            msg.setStyleSheet(f"font-size: 15px; color: {t['btn_text']}; font-weight: bold;")
+            lay.addWidget(msg)
+            btn_lay = QHBoxLayout()
+            btn_yes = QPushButton("记住")
+            btn_no = QPushButton("不了吧")
+            btn_lay.addStretch()
+            btn_lay.addWidget(btn_yes)
+            btn_lay.addWidget(btn_no)
+            btn_lay.addStretch()
+            lay.addLayout(btn_lay)
+            dialog.setFixedSize(300, 180)
+            pet_geo = self.frameGeometry()
+            screen = QGuiApplication.primaryScreen().size()
+            dialog.move(min(pet_geo.right() + 10, screen.width() - dialog.width()),
+                        min(pet_geo.top(), screen.height() - dialog.height()))
+
+            result = [False]
+            btn_yes.clicked.connect(lambda: (list.__setitem__(result, 0, True), dialog.accept()))
+            btn_no.clicked.connect(dialog.reject)
+            dialog.exec()
+
+            if not result[0]:
+                return False  # 不了吧 → 放弃保存
+            # 记住 → 移除最旧的舞蹈
             dances.pop(0)
+
+        dances.append({"poses": poses, "loops": loops})
         self._save_saved_dances(dances)
+        return True
 
     # ============================== 通用播放器 ==============================
 

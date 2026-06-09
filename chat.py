@@ -40,6 +40,17 @@ SYSTEM_PROMPT = """角色定义
 
 请以"女仆酱已就位，随时为您服务 (｡♥‿♥｡)"作为开场白。"""
 
+_THEMES = {
+    "maid": {
+        "bg": "#FFF0F5", "border": "#FF69B4", "text_bold": "#FF1493",
+        "label": "#8B4513", "input_border": "#FFB6C1", "btn_text": "#FF69B4",
+    },
+    "catgirl": {
+        "bg": "#F0F0F0", "border": "#999999", "text_bold": "#333333",
+        "label": "#8B4513", "input_border": "#CCCCCC", "btn_text": "#666666",
+    },
+}
+
 _TUTORIAL_PAGES = [
     "1. 主人需要先访问 DeepSeek 开发者平台，网址是：https://platform.deepseek.com，要将网址复制然后粘贴到浏览器呦",
     "2. 点击页面右上角的“Sign In”或者“登录”按钮，选择“注册新账号”，用主人的邮箱和密码完成注册就好呢。注册完成后记得去邮箱里点击验证链接，这样账号才算真正激活哦（不然女仆酱也没法帮主人继续下一步呢）～",
@@ -80,6 +91,7 @@ class ChatMixin:
         self._api_key = ""
         self._base_url = "https://api.deepseek.com"
         self._model = "deepseek-v4-flash"
+        self._identity = "maid"
         if os.path.exists(self._CONFIG_FILE):
             try:
                 with open(self._CONFIG_FILE, "r", encoding="utf-8") as f:
@@ -87,6 +99,7 @@ class ChatMixin:
                 self._api_key = data.get("api_key", "")
                 self._base_url = data.get("base_url", self._base_url)
                 self._model = data.get("model", self._model)
+                self._identity = data.get("identity", "maid")
             except (json.JSONDecodeError, OSError):
                 pass
         else:
@@ -100,9 +113,14 @@ class ChatMixin:
                     "api_key": self._api_key,
                     "base_url": self._base_url,
                     "model": self._model,
+                    "identity": self._identity,
                 }, f, indent=2)
         except OSError:
             pass
+
+    def _theme(self):
+        """返回当前身份对应的主题色字典。"""
+        return _THEMES.get(self._identity, _THEMES["maid"])
 
     # ============================== 工作 / AI 聊天 ==============================
 
@@ -112,9 +130,9 @@ class ChatMixin:
         self._state_timer.stop()
         self._change_state("work")
         if not self._api_key:
-            QTimer.singleShot(200, lambda: self._show_setup_dialog(edit_mode=False))
+            self._show_setup_dialog(edit_mode=False)
         else:
-            QTimer.singleShot(200, self._show_work_menu)
+            self._show_work_menu()
 
     def _show_work_menu(self):
         """已有 API key 时显示工作模式选择菜单。"""
@@ -122,25 +140,26 @@ class ChatMixin:
         dialog.setWindowTitle("女仆酱")
         dialog.setWindowFlags(Qt.WindowType.Dialog | Qt.WindowType.FramelessWindowHint)
         dialog.setAttribute(Qt.WidgetAttribute.WA_StyledBackground)
-        dialog.setStyleSheet("""
-            QDialog {
-                background: #FFF0F5;
-                border: 2px solid #FF69B4;
+        t = self._theme()
+        dialog.setStyleSheet(f"""
+            QDialog {{
+                background: {t["bg"]};
+                border: 2px solid {t["border"]};
                 border-radius: 12px;
                 padding: 10px;
-            }
-            QPushButton {
+            }}
+            QPushButton {{
                 padding: 10px 30px;
-                border: 1px solid #FF69B4;
+                border: 1px solid {t["border"]};
                 border-radius: 8px;
                 background: white;
-                color: #FF69B4;
+                color: {t["btn_text"]};
                 font-size: 14px;
                 min-width: 140px;
-            }
-            QPushButton:hover {
+            }}
+            QPushButton:hover {{
                 background: #FFE4EC;
-            }
+            }}
         """)
 
         layout = QVBoxLayout(dialog)
@@ -148,7 +167,7 @@ class ChatMixin:
         layout.setContentsMargins(25, 25, 25, 25)
 
         label = QLabel("主人，有什么需要帮忙的吗")
-        label.setStyleSheet("font-size: 15px; color: #FF1493; font-weight: bold;")
+        label.setStyleSheet(f"font-size: 15px; color: {t['text_bold']}; font-weight: bold;")
         label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(label)
 
@@ -197,35 +216,36 @@ class ChatMixin:
         dialog.setWindowTitle("注入灵魂")
         dialog.setWindowFlags(Qt.WindowType.Dialog | Qt.WindowType.FramelessWindowHint)
         dialog.setAttribute(Qt.WidgetAttribute.WA_StyledBackground)
-        dialog.setStyleSheet("""
-            QDialog {
-                background: #FFF0F5;
-                border: 2px solid #FF69B4;
+        t = self._theme()
+        dialog.setStyleSheet(f"""
+            QDialog {{
+                background: {t["bg"]};
+                border: 2px solid {t["border"]};
                 border-radius: 12px;
-            }
-            QLabel {
-                color: #8B4513;
+            }}
+            QLabel {{
+                color: {t["label"]};
                 font-size: 13px;
-            }
-            QLineEdit {
+            }}
+            QLineEdit {{
                 padding: 6px;
-                border: 1px solid #FFB6C1;
+                border: 1px solid {t["input_border"]};
                 border-radius: 4px;
                 background: white;
                 color: black;
                 font-size: 13px;
-            }
-            QPushButton {
+            }}
+            QPushButton {{
                 padding: 8px 24px;
-                border: 1px solid #FF69B4;
+                border: 1px solid {t["border"]};
                 border-radius: 6px;
                 background: white;
-                color: #FF69B4;
+                color: {t["btn_text"]};
                 font-size: 13px;
-            }
-            QPushButton:hover {
+            }}
+            QPushButton:hover {{
                 background: #FFE4EC;
-            }
+            }}
         """)
 
         layout = QVBoxLayout(dialog)
@@ -234,7 +254,7 @@ class ChatMixin:
 
         title_text = "修改配置" if edit_mode else "请主人为女仆酱注入灵魂"
         label = QLabel(title_text)
-        label.setStyleSheet("font-size: 16px; color: #FF1493; font-weight: bold;")
+        label.setStyleSheet(f"font-size: 16px; color: {t["text_bold"]}; font-weight: bold;")
         label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(label)
 
@@ -258,7 +278,7 @@ class ChatMixin:
         btn_toggle.setFixedWidth(50)
         btn_toggle.setStyleSheet("""
             QPushButton {
-                padding: 4px 8px; border: 1px solid #FFB6C1;
+                padding: 4px 8px; border: 1px solid {t["input_border"]};
                 border-radius: 4px; background: white;
                 color: #FF69B4; font-size: 12px;
             }
@@ -309,7 +329,8 @@ class ChatMixin:
             input_key.text().strip(), input_url.text().strip(),
             input_model.text().strip(), dialog, edit_mode))
         btn_cancel.clicked.connect(dialog.reject)
-        dialog.rejected.connect(self._on_work_cancelled)
+        dialog.rejected.connect(
+            lambda: self._on_setup_cancelled(edit_mode))
 
         dialog.resize(340, 320)
         x, y = self._pet_side_pos(dialog)
@@ -344,6 +365,14 @@ class ChatMixin:
         self._change_state("stand")
         self._idle_timer.start(600_000)
 
+    def _on_setup_cancelled(self, edit_mode):
+        """配置对话框取消：有上级菜单则返回，否则回到 stand。"""
+        if edit_mode or self._api_key:
+            self._change_state("work")
+            QTimer.singleShot(200, self._show_work_menu)
+        else:
+            self._on_work_cancelled()
+
     def _show_chat_dialog(self):
         """显示 AI 聊天对话框。"""
         if self._chat_dialog is not None:
@@ -354,39 +383,40 @@ class ChatMixin:
         dialog.setWindowTitle("女仆酱")
         dialog.setWindowFlags(Qt.WindowType.Dialog | Qt.WindowType.FramelessWindowHint)
         dialog.setAttribute(Qt.WidgetAttribute.WA_StyledBackground)
-        dialog.setStyleSheet("""
-            QDialog {
-                background: #FFF0F5;
-                border: 2px solid #FF69B4;
+        t = self._theme()
+        dialog.setStyleSheet(f"""
+            QDialog {{
+                background: {t["bg"]};
+                border: 2px solid {t["border"]};
                 border-radius: 12px;
-            }
-            QTextEdit {
-                border: 1px solid #FFB6C1;
+            }}
+            QTextEdit {{
+                border: 1px solid {t["input_border"]};
                 border-radius: 6px;
                 background: white;
                 color: black;
                 font-size: 13px;
                 padding: 6px;
-            }
-            QLineEdit {
-                border: 1px solid #FFB6C1;
+            }}
+            QLineEdit {{
+                border: 1px solid {t["input_border"]};
                 border-radius: 4px;
                 background: white;
                 color: black;
                 padding: 6px;
                 font-size: 13px;
-            }
-            QPushButton {
+            }}
+            QPushButton {{
                 padding: 8px 16px;
-                border: 1px solid #FF69B4;
+                border: 1px solid {t["border"]};
                 border-radius: 6px;
                 background: white;
-                color: #FF69B4;
+                color: {t["btn_text"]};
                 font-size: 13px;
-            }
-            QPushButton:hover {
+            }}
+            QPushButton:hover {{
                 background: #FFE4EC;
-            }
+            }}
         """)
 
         layout = QVBoxLayout(dialog)
@@ -394,7 +424,7 @@ class ChatMixin:
         layout.setContentsMargins(15, 15, 15, 15)
 
         title = QLabel("女仆酱 (｡♥‿♥｡)")
-        title.setStyleSheet("font-size: 15px; color: #FF1493; font-weight: bold;")
+        title.setStyleSheet(f"font-size: 15px; color: {t["text_bold"]}; font-weight: bold;")
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(title)
 
@@ -410,17 +440,23 @@ class ChatMixin:
         self._chat_input = QLineEdit()
         self._chat_input.setPlaceholderText("和女仆酱说点什么...")
         self._chat_input.returnPressed.connect(self._send_message)
+        btn_file = QPushButton("@")
+        btn_file.setFixedWidth(36)
+        btn_file.setToolTip("上传文件（txt/docx/xlsx/pptx）")
+        btn_file.clicked.connect(self._upload_file)
         btn_send = QPushButton("发送")
         btn_send.clicked.connect(self._send_message)
         input_layout.addWidget(self._chat_input)
+        input_layout.addWidget(btn_file)
         input_layout.addWidget(btn_send)
         layout.addLayout(input_layout)
 
         # 底部按钮行：工作模式、联网模式、位置配置、关闭
         btn_layout = QHBoxLayout()
-        btn_style_on = ("QPushButton { padding: 6px 10px; border: 1px solid #FF69B4;"
-                        " border-radius: 6px; background: #FFB6C1; color: black;"
-                        " font-size: 12px; }")
+        t = self._theme()
+        btn_style_on = (f"QPushButton {{ padding: 6px 10px; border: 1px solid {t['border']};"
+                        f" border-radius: 6px; background: {t['input_border']}; color: black;"
+                        f" font-size: 12px; }}")
         btn_style_off = ("QPushButton { padding: 6px 10px; border: 1px solid #ccc;"
                          " border-radius: 6px; background: white; color: black;"
                          " font-size: 12px; }")
@@ -511,6 +547,55 @@ class ChatMixin:
         self._chat_display.append("女仆酱：思考中...")
         threading.Thread(target=self._do_api_request, daemon=True).start()
 
+    def _upload_file(self):
+        """打开文件选择器，读取文件内容后填入输入框。"""
+        path, _ = QFileDialog.getOpenFileName(
+            self._chat_dialog, "选择文件", "",
+            "文档 (*.txt *.docx *.xlsx *.pptx);;所有文件 (*)",
+        )
+        if not path:
+            return
+        if os.path.getsize(path) > 10 * 1024 * 1024:
+            QMessageBox.warning(self._chat_dialog, "提示", "文件超过 10MB，请选择较小的文件")
+            return
+        content = self._read_file_content(path)
+        if content is None:
+            QMessageBox.warning(self._chat_dialog, "提示", "无法读取该文件内容")
+            return
+        self._chat_input.setText(f"以下是我的文件内容：\n{content}")
+
+    def _read_file_content(self, path):
+        """根据扩展名读取文件内容。"""
+        ext = os.path.splitext(path)[1].lower()
+        try:
+            if ext == ".txt":
+                with open(path, "r", encoding="utf-8", errors="replace") as f:
+                    return f.read()
+            elif ext == ".docx":
+                from docx import Document
+                doc = Document(path)
+                return "\n".join(p.text for p in doc.paragraphs)
+            elif ext == ".xlsx":
+                from openpyxl import load_workbook
+                wb = load_workbook(path, read_only=True, data_only=True)
+                lines = []
+                for sheet in wb.worksheets:
+                    for row in sheet.iter_rows(values_only=True):
+                        lines.append("\t".join(str(c or "") for c in row))
+                return "\n".join(lines)
+            elif ext == ".pptx":
+                from pptx import Presentation
+                prs = Presentation(path)
+                texts = []
+                for slide in prs.slides:
+                    for shape in slide.shapes:
+                        if shape.has_text_frame:
+                            texts.append(shape.text)
+                return "\n".join(texts)
+        except Exception:
+            return None
+        return None
+
     def _resolve_output_dir(self):
         """返回用户设定的输出目录。"""
         return self._output_dir
@@ -589,11 +674,15 @@ class ChatMixin:
         self._chat_display.append("")
 
     def _close_chat(self):
-        """关闭聊天窗口，回到 stand。"""
+        """关闭聊天窗口，回到上一级菜单。"""
         self._chat_dialog.close()
         self._chat_dialog = None
-        self._change_state("stand")
-        self._idle_timer.start(600_000)
+        if self._api_key:
+            self._change_state("work")
+            self._show_work_menu()
+        else:
+            self._change_state("stand")
+            self._idle_timer.start(600_000)
 
     # ============================== 高级设置 ==============================
 
@@ -603,14 +692,15 @@ class ChatMixin:
         dialog.setWindowTitle("高级设置")
         dialog.setWindowFlags(Qt.WindowType.Dialog | Qt.WindowType.FramelessWindowHint)
         dialog.setAttribute(Qt.WidgetAttribute.WA_StyledBackground)
-        dialog.setStyleSheet("""
-            QDialog {
-                background: #FFF0F5;
-                border: 2px solid #FF69B4;
+        t = self._theme()
+        dialog.setStyleSheet(f"""
+            QDialog {{
+                background: {t["bg"]};
+                border: 2px solid {t["border"]};
                 border-radius: 12px;
                 padding: 10px;
-            }
-            QPushButton {
+            }}
+            QPushButton {{
                 padding: 10px 30px;
                 border: 1px solid #ccc;
                 border-radius: 8px;
@@ -618,10 +708,10 @@ class ChatMixin:
                 color: black;
                 font-size: 14px;
                 min-width: 160px;
-            }
-            QPushButton:hover {
+            }}
+            QPushButton:hover {{
                 background: #F5F5F5;
-            }
+            }}
         """)
 
         layout = QVBoxLayout(dialog)
@@ -629,7 +719,7 @@ class ChatMixin:
         layout.setContentsMargins(20, 20, 20, 20)
 
         label = QLabel("高级设置")
-        label.setStyleSheet("font-size: 15px; color: #FF1493; font-weight: bold;")
+        label.setStyleSheet(f"font-size: 15px; color: {t['text_bold']}; font-weight: bold;")
         label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(label)
 
@@ -639,7 +729,7 @@ class ChatMixin:
             btn_web.setStyleSheet("""
                 QPushButton {
                     padding: 10px 30px; border: 1px solid #FF69B4;
-                    border-radius: 8px; background: #FFB6C1;
+                    border-radius: 8px; background: {t["input_border"]};
                     color: black; font-size: 14px; min-width: 160px;
                 }
             """)
@@ -651,7 +741,7 @@ class ChatMixin:
                 btn_web.setStyleSheet("""
                     QPushButton {
                         padding: 10px 30px; border: 1px solid #FF69B4;
-                        border-radius: 8px; background: #FFB6C1;
+                        border-radius: 8px; background: {t["input_border"]};
                         color: black; font-size: 14px; min-width: 160px;
                     }
                 """)
@@ -671,7 +761,7 @@ class ChatMixin:
             btn_work_mode.setStyleSheet("""
                 QPushButton {
                     padding: 10px 30px; border: 1px solid #FF69B4;
-                    border-radius: 8px; background: #FFB6C1;
+                    border-radius: 8px; background: {t["input_border"]};
                     color: black; font-size: 14px; min-width: 160px;
                 }
             """)
@@ -683,7 +773,7 @@ class ChatMixin:
                 btn_work_mode.setStyleSheet("""
                     QPushButton {
                         padding: 10px 30px; border: 1px solid #FF69B4;
-                        border-radius: 8px; background: #FFB6C1;
+                        border-radius: 8px; background: {t["input_border"]};
                         color: black; font-size: 14px; min-width: 160px;
                     }
                 """)
@@ -728,35 +818,36 @@ class ChatMixin:
         dialog.setWindowTitle("教程")
         dialog.setWindowFlags(Qt.WindowType.Dialog | Qt.WindowType.FramelessWindowHint)
         dialog.setAttribute(Qt.WidgetAttribute.WA_StyledBackground)
-        dialog.setStyleSheet("""
-            QDialog {
-                background: #FFF0F5;
-                border: 2px solid #FF69B4;
+        t = self._theme()
+        dialog.setStyleSheet(f"""
+            QDialog {{
+                background: {t["bg"]};
+                border: 2px solid {t["border"]};
                 border-radius: 12px;
-            }
-            QTextEdit {
-                border: 1px solid #FFB6C1;
+            }}
+            QTextEdit {{
+                border: 1px solid {t["input_border"]};
                 border-radius: 6px;
                 background: white;
                 color: black;
                 font-size: 13px;
                 padding: 8px;
-            }
-            QPushButton {
+            }}
+            QPushButton {{
                 padding: 8px 20px;
-                border: 1px solid #FF69B4;
+                border: 1px solid {t["border"]};
                 border-radius: 6px;
                 background: white;
-                color: #FF69B4;
+                color: {t["btn_text"]};
                 font-size: 13px;
-            }
-            QPushButton:hover {
+            }}
+            QPushButton:hover {{
                 background: #FFE4EC;
-            }
-            QPushButton:disabled {
+            }}
+            QPushButton:disabled {{
                 border-color: #ccc;
                 color: #ccc;
-            }
+            }}
         """)
 
         layout = QVBoxLayout(dialog)
@@ -764,7 +855,7 @@ class ChatMixin:
         layout.setContentsMargins(20, 20, 20, 20)
 
         title = QLabel("教程")
-        title.setStyleSheet("font-size: 16px; color: #FF1493; font-weight: bold;")
+        title.setStyleSheet(f"font-size: 16px; color: {t['text_bold']}; font-weight: bold;")
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(title)
 

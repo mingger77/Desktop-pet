@@ -14,7 +14,7 @@ class GameMixin:
         self._idle_timer.stop()
         self._state_timer.stop()
         self._change_state("cute")
-        QTimer.singleShot(100, self._show_choice_dialog)
+        self._show_choice_dialog()
 
     def _show_choice_dialog(self):
         """显示石头/剪刀/布选择对话框，宠物保持 cute 状态。"""
@@ -24,26 +24,27 @@ class GameMixin:
             Qt.WindowType.Dialog | Qt.WindowType.FramelessWindowHint
         )
         dialog.setAttribute(Qt.WidgetAttribute.WA_StyledBackground)
-        dialog.setStyleSheet("""
-            QDialog {
-                background: #FFB6C1;
-                border: 2px solid #FF69B4;
+        t = self._theme()
+        dialog.setStyleSheet(f"""
+            QDialog {{
+                background: {t["input_border"]};
+                border: 2px solid {t["border"]};
                 border-radius: 12px;
-            }
-            QPushButton {
+            }}
+            QPushButton {{
                 padding: 10px 20px;
                 font-size: 14px;
-                border: 1px solid #FF69B4;
+                border: 1px solid {t["border"]};
                 border-radius: 6px;
                 background: white;
-                color: #FF69B4;
-            }
-            QPushButton:hover {
+                color: {t["btn_text"]};
+            }}
+            QPushButton:hover {{
                 background: #FFE4EC;
-            }
-            QPushButton:pressed {
+            }}
+            QPushButton:pressed {{
                 background: #FFD0D8;
-            }
+            }}
         """)
 
         layout = QVBoxLayout(dialog)
@@ -51,7 +52,7 @@ class GameMixin:
         layout.setContentsMargins(20, 20, 20, 20)
 
         label = QLabel("主人，来陪我玩石头剪刀布嘛！")
-        label.setStyleSheet("font-size: 15px; color: #FF1493; font-weight: bold;")
+        label.setStyleSheet(f"font-size: 15px; color: {t["text_bold"]}; font-weight: bold;")
         label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(label)
 
@@ -76,10 +77,10 @@ class GameMixin:
             QPushButton {
                 padding: 6px 16px;
                 font-size: 12px;
-                border: 1px solid #FF69B4;
+                border: 1px solid {t["border"]};
                 border-radius: 4px;
                 background: white;
-                color: #FF69B4;
+                color: {t["border"]};
             }
             QPushButton:hover {
                 background: #FFE4EC;
