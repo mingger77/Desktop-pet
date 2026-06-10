@@ -13,24 +13,6 @@
         "dance5",
         "dance6"
       ],
-      "loops": 3
-    },
-    {
-      "poses": [
-        "dance1",
-        "dance4",
-        "dance5"
-      ],
-      "loops": 2
-    },
-    {
-      "poses": [
-        "dance1",
-        "dance2",
-        "dance4",
-        "dance5",
-        "dance6"
-      ],
       "loops": 4
     }
   ],
