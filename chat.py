@@ -8,7 +8,6 @@ from PySide6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout,
                                 QTextEdit, QFileDialog, QMessageBox)
 from PySide6.QtGui import QGuiApplication
 from openai import OpenAI
-from work import generate_document, GENERATE_DOC_TOOL, handle_tool_call
 
 
 SYSTEM_PROMPT = """角色定义
@@ -125,14 +124,11 @@ class ChatMixin:
     # ============================== 工作 / AI 聊天 ==============================
 
     def _start_work(self):
-        """进入工作模式：检查 API 配置，弹出对应对话框。"""
+        """进入工作模式：弹出工作模式选择菜单。"""
         self._idle_timer.stop()
         self._state_timer.stop()
         self._change_state("work")
-        if not self._api_key:
-            self._show_setup_dialog(edit_mode=False)
-        else:
-            self._show_work_menu()
+        self._show_work_menu()
 
     def _show_work_menu(self):
         """已有 API key 时显示工作模式选择菜单。"""
@@ -206,7 +202,10 @@ class ChatMixin:
         """工作模式菜单选项处理。"""
         dialog.accept()
         if choice == "chat":
-            QTimer.singleShot(200, self._show_chat_dialog)
+            if not self._api_key:
+                QTimer.singleShot(200, lambda: self._show_setup_dialog(edit_mode=False))
+            else:
+                QTimer.singleShot(200, self._show_chat_dialog)
         elif choice == "config":
             QTimer.singleShot(200, lambda: self._show_setup_dialog(edit_mode=True))
 
@@ -366,12 +365,9 @@ class ChatMixin:
         self._idle_timer.start(600_000)
 
     def _on_setup_cancelled(self, edit_mode):
-        """配置对话框取消：有上级菜单则返回，否则回到 stand。"""
-        if edit_mode or self._api_key:
-            self._change_state("work")
-            QTimer.singleShot(200, self._show_work_menu)
-        else:
-            self._on_work_cancelled()
+        """配置对话框取消：回到工作菜单。"""
+        self._change_state("work")
+        QTimer.singleShot(200, self._show_work_menu)
 
     def _show_chat_dialog(self):
         """显示 AI 聊天对话框。"""
@@ -440,18 +436,13 @@ class ChatMixin:
         self._chat_input = QLineEdit()
         self._chat_input.setPlaceholderText("和女仆酱说点什么...")
         self._chat_input.returnPressed.connect(self._send_message)
-        btn_file = QPushButton("@")
-        btn_file.setFixedWidth(36)
-        btn_file.setToolTip("上传文件（txt/docx/xlsx/pptx）")
-        btn_file.clicked.connect(self._upload_file)
         btn_send = QPushButton("发送")
         btn_send.clicked.connect(self._send_message)
         input_layout.addWidget(self._chat_input)
-        input_layout.addWidget(btn_file)
         input_layout.addWidget(btn_send)
         layout.addLayout(input_layout)
 
-        # 底部按钮行：工作模式、联网模式、位置配置、关闭
+        # 底部按钮行：联网模式、关闭
         btn_layout = QHBoxLayout()
         t = self._theme()
         btn_style_on = (f"QPushButton {{ padding: 6px 10px; border: 1px solid {t['border']};"
@@ -461,18 +452,6 @@ class ChatMixin:
                          " border-radius: 6px; background: white; color: black;"
                          " font-size: 12px; }")
         btn_hover = " QPushButton:hover { background: #F5F5F5; }"
-
-        # 工作模式
-        btn_work_mode = QPushButton("工作模式")
-        btn_work_mode.setStyleSheet(btn_style_off + btn_hover)
-        self._work_mode_enabled = False
-
-        def toggle_work_mode():
-            self._work_mode_enabled = not self._work_mode_enabled
-            btn_work_mode.setStyleSheet(
-                (btn_style_on if self._work_mode_enabled else btn_style_off) + btn_hover)
-        btn_work_mode.clicked.connect(toggle_work_mode)
-        btn_layout.addWidget(btn_work_mode)
 
         # 联网模式
         btn_web = QPushButton("联网模式")
@@ -485,23 +464,6 @@ class ChatMixin:
                 (btn_style_on if self._web_search_enabled else btn_style_off) + btn_hover)
         btn_web.clicked.connect(toggle_web)
         btn_layout.addWidget(btn_web)
-
-        # 位置配置：从配置文件加载保存的路径，否则默认桌面
-        saved_dir = self._load_saved_output_dir()
-        self._output_dir = saved_dir if os.path.isdir(saved_dir) else os.path.expanduser("~")
-        btn_location = QPushButton("位置配置")
-        btn_location.setStyleSheet(btn_style_off + btn_hover)
-
-        def choose_location():
-            chosen = QFileDialog.getExistingDirectory(
-                self._chat_dialog, "选择文件保存位置", self._output_dir)
-            if chosen:
-                self._output_dir = chosen
-                self._save_output_dir(chosen)
-                short = os.path.basename(chosen)
-                btn_location.setText(f"📁 {short}")
-        btn_location.clicked.connect(choose_location)
-        btn_layout.addWidget(btn_location)
 
         # 关闭
         btn_close = QPushButton("关闭")
@@ -532,14 +494,6 @@ class ChatMixin:
         if not msg:
             return
 
-        # 工作模式开启时检查输出目录是否有效
-        if self._work_mode_enabled and not os.path.isdir(self._output_dir):
-            chosen = QFileDialog.getExistingDirectory(
-                self._chat_dialog, "选择文件保存位置", os.path.expanduser("~"))
-            if chosen:
-                self._output_dir = chosen
-                self._save_output_dir(chosen)
-
         self._chat_input.clear()
         self._chat_display.append(f"主人：{msg}")
         self._chat_display.append("")
@@ -547,81 +501,8 @@ class ChatMixin:
         self._chat_display.append("女仆酱：思考中...")
         threading.Thread(target=self._do_api_request, daemon=True).start()
 
-    def _upload_file(self):
-        """打开文件选择器，读取文件内容后填入输入框。"""
-        path, _ = QFileDialog.getOpenFileName(
-            self._chat_dialog, "选择文件", "",
-            "文档 (*.txt *.docx *.xlsx *.pptx);;所有文件 (*)",
-        )
-        if not path:
-            return
-        if os.path.getsize(path) > 10 * 1024 * 1024:
-            QMessageBox.warning(self._chat_dialog, "提示", "文件超过 10MB，请选择较小的文件")
-            return
-        content = self._read_file_content(path)
-        if content is None:
-            QMessageBox.warning(self._chat_dialog, "提示", "无法读取该文件内容")
-            return
-        self._chat_input.setText(f"以下是我的文件内容：\n{content}")
-
-    def _read_file_content(self, path):
-        """根据扩展名读取文件内容。"""
-        ext = os.path.splitext(path)[1].lower()
-        try:
-            if ext == ".txt":
-                with open(path, "r", encoding="utf-8", errors="replace") as f:
-                    return f.read()
-            elif ext == ".docx":
-                from docx import Document
-                doc = Document(path)
-                return "\n".join(p.text for p in doc.paragraphs)
-            elif ext == ".xlsx":
-                from openpyxl import load_workbook
-                wb = load_workbook(path, read_only=True, data_only=True)
-                lines = []
-                for sheet in wb.worksheets:
-                    for row in sheet.iter_rows(values_only=True):
-                        lines.append("\t".join(str(c or "") for c in row))
-                return "\n".join(lines)
-            elif ext == ".pptx":
-                from pptx import Presentation
-                prs = Presentation(path)
-                texts = []
-                for slide in prs.slides:
-                    for shape in slide.shapes:
-                        if shape.has_text_frame:
-                            texts.append(shape.text)
-                return "\n".join(texts)
-        except Exception:
-            return None
-        return None
-
-    def _resolve_output_dir(self):
-        """返回用户设定的输出目录。"""
-        return self._output_dir
-
-    def _load_saved_output_dir(self):
-        """从配置文件加载保存的输出目录。"""
-        try:
-            with open(self._CONFIG_FILE, "r", encoding="utf-8") as f:
-                data = json.load(f)
-            return data.get("output_dir", "")
-        except (json.JSONDecodeError, OSError):
-            return ""
-
-    def _save_output_dir(self, path):
-        """保存输出目录到配置文件。"""
-        try:
-            with open(self._CONFIG_FILE, "r", encoding="utf-8") as f:
-                data = json.load(f)
-            data["output_dir"] = path
-            with open(self._CONFIG_FILE, "w", encoding="utf-8") as f:
-                json.dump(data, f, indent=2)
-        except OSError:
-            pass
-
     def _do_api_request(self):
-        """使用 OpenAI SDK 调用 API（非流式），支持工具调用。"""
+        """使用 OpenAI SDK 调用 API（非流式）。"""
         try:
             client = OpenAI(api_key=self._api_key, base_url=self._base_url)
 
@@ -629,39 +510,13 @@ class ChatMixin:
                 "model": self._model,
                 "messages": self._chat_messages,
             }
-            if self._work_mode_enabled:
-                kwargs["tools"] = [GENERATE_DOC_TOOL]
             if self._web_search_enabled:
                 kwargs["extra_body"] = {"web_search": True}
 
             resp = client.chat.completions.create(**kwargs)
             msg = resp.choices[0].message
-
-            # 如果有工具调用，先确定输出目录，再执行
-            if msg.tool_calls:
-                self._chat_messages.append({
-                    "role": "assistant",
-                    "content": msg.content or None,
-                    "tool_calls": [
-                        {"id": tc.id, "type": "function",
-                         "function": {"name": tc.function.name, "arguments": tc.function.arguments}}
-                        for tc in msg.tool_calls
-                    ],
-                })
-                output_dir = self._resolve_output_dir()
-                for tc in msg.tool_calls:
-                    self._chat_messages.append(handle_tool_call(tc, output_dir))
-
-                # 第二轮：非流式获取最终回复
-                resp2 = client.chat.completions.create(
-                    model=self._model,
-                    messages=self._chat_messages,
-                )
-                reply = resp2.choices[0].message.content or ""
-                self._chat_messages.append({"role": "assistant", "content": reply})
-            else:
-                reply = msg.content or ""
-                self._chat_messages.append({"role": "assistant", "content": reply})
+            reply = msg.content or ""
+            self._chat_messages.append({"role": "assistant", "content": reply})
 
             self._reply_queue.put(reply)
 
@@ -674,15 +529,11 @@ class ChatMixin:
         self._chat_display.append("")
 
     def _close_chat(self):
-        """关闭聊天窗口，回到上一级菜单。"""
+        """关闭聊天窗口，回到工作菜单。"""
         self._chat_dialog.close()
         self._chat_dialog = None
-        if self._api_key:
-            self._change_state("work")
-            self._show_work_menu()
-        else:
-            self._change_state("stand")
-            self._idle_timer.start(600_000)
+        self._change_state("work")
+        self._show_work_menu()
 
     # ============================== 高级设置 ==============================
 
@@ -867,12 +718,23 @@ class ChatMixin:
         nav_layout = QHBoxLayout()
         btn_prev = QPushButton("上一页")
         btn_next = QPushButton("下一页")
+        btn_close = QPushButton("关闭")
+        btn_close.setStyleSheet("""
+            QPushButton {
+                padding: 8px 16px; border: 1px solid #ccc;
+                border-radius: 6px; background: white;
+                color: #999; font-size: 12px;
+            }
+            QPushButton:hover { background: #F5F5F5; }
+        """)
+        btn_close.clicked.connect(dialog.reject)
         page_label = QLabel("第 1 / 24 页")
         page_label.setStyleSheet("color: #8B4513; font-size: 13px;")
         nav_layout.addWidget(btn_prev)
         nav_layout.addStretch()
         nav_layout.addWidget(page_label)
         nav_layout.addStretch()
+        nav_layout.addWidget(btn_close)
         nav_layout.addWidget(btn_next)
         layout.addLayout(nav_layout)
 

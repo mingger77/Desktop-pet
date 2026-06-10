@@ -187,11 +187,16 @@ class DanceCustomizeDialog(QDialog):
 
         loop_layout = QHBoxLayout()
         loop_layout.addWidget(QLabel("循环次数："))
-        self._spin_loops = QSpinBox()
-        self._spin_loops.setMinimum(2)
-        self._spin_loops.setMaximum(4)
-        self._spin_loops.setValue(3)
-        loop_layout.addWidget(self._spin_loops)
+        self._loop_value = [3]  # 默认 3 次
+        self._loop_btns = []
+        t = self._theme()
+        for val in (2, 3, 4):
+            btn = QPushButton(f"{val}次")
+            btn.setCheckable(False)
+            btn.setStyleSheet(self._btn_style(t, val == 3))
+            btn.clicked.connect(lambda checked, v=val: self._select_loop(v))
+            self._loop_btns.append(btn)
+            loop_layout.addWidget(btn)
         loop_layout.addStretch()
         layout.addLayout(loop_layout)
 
@@ -209,6 +214,16 @@ class DanceCustomizeDialog(QDialog):
 
         self.setFixedSize(280, 380)
 
+    def _btn_style(self, t, active=False):
+        bg = t['input_border'] if active else "white"
+        return f"QPushButton {{ padding: 6px 12px; border: 1px solid {t['border']}; border-radius: 4px; background: {bg}; color: {t['btn_text']}; font-size: 12px; min-width: 40px; }} QPushButton:hover {{ background: #FFE4EC; }}"
+
+    def _select_loop(self, val):
+        self._loop_value[0] = val
+        t = self._theme()
+        for btn, v in zip(self._loop_btns, (2, 3, 4)):
+            btn.setStyleSheet(self._btn_style(t, v == val))
+
     def _get_selected_poses(self):
         selected = []
         for i, cb in enumerate(self._checkboxes):
@@ -221,8 +236,7 @@ class DanceCustomizeDialog(QDialog):
         if len(poses) < 3:
             QMessageBox.warning(self, "提示", "请至少选择 3 个动作")
             return
-        loops = self._spin_loops.value()
-        self._result = ("play", poses, loops)
+        self._result = ("play", poses, self._loop_value[0])
         self.accept()
 
     def _on_save(self):
@@ -230,8 +244,7 @@ class DanceCustomizeDialog(QDialog):
         if len(poses) < 3:
             QMessageBox.warning(self, "提示", "请至少选择 3 个动作")
             return
-        loops = self._spin_loops.value()
-        self._result = ("save", poses, loops)
+        self._result = ("save", poses, self._loop_value[0])
         self.accept()
 
     def _position_near_parent(self):
@@ -263,15 +276,23 @@ class DanceMixin:
     # ============================== 入口 ==============================
 
     def _start_dance(self):
-        """右键菜单入口：弹出跳舞模式选择对话框，退出时回到主界面。"""
-        dialog = DanceSelectorDialog(self)
-        choice = dialog.get_choice()
-        if choice == "random":
-            self._start_random_dance()
-        elif choice == "saved":
-            self._show_saved_dances()
-        elif choice == "custom":
-            self._start_custom_dance()
+        """右键菜单入口：循环显示跳舞选择器，子页面返回时回到选择器。"""
+        while True:
+            dialog = DanceSelectorDialog(self)
+            choice = dialog.get_choice()
+            if choice is None:   # 返回 → 退出跳舞
+                break
+            if choice == "random":
+                self._start_random_dance()
+                break
+            elif choice == "saved":
+                if self._show_saved_dances() == "back":
+                    continue    # 返回 → 回到选择器
+                break
+            elif choice == "custom":
+                if self._start_custom_dance() == "back":
+                    continue    # 取消 → 回到选择器
+                break
         if not self._dance_active:
             self._change_state("stand")
             self._idle_timer.start(600_000)
@@ -279,9 +300,9 @@ class DanceMixin:
     # ============================== 模式 A：随机跳舞 ==============================
 
     def _start_random_dance(self):
-        """从 6 个动作中随机选 4 个，循环 3 次。"""
-        poses = random.sample(self._DANCE_POSES, 4)
-        self._play_dance_sequence(poses, 3)
+        """从 6 个动作中随机选 3~6 个，不重复，循环 3 次。"""
+        poses = random.sample(self._DANCE_POSES, random.randint(3, 6))
+        self._play_dance_sequence(poses, random.randint(2, 4))
 
     # ============================== 模式 B：已保存的舞蹈 ==============================
 
@@ -334,7 +355,7 @@ class DanceMixin:
                 y = screen.height() - dialog.height()
             dialog.move(max(0, x), max(0, y))
             dialog.exec()
-            return
+            return "back"
 
         current_idx = [0]
 
@@ -378,8 +399,8 @@ class DanceMixin:
         dance_info = QLabel()
         dance_info.setAlignment(Qt.AlignmentFlag.AlignCenter)
         dance_info.setStyleSheet(f"font-size: 13px; color: {t['label']}; padding: 15px;"
-                                 "background: white; border-radius: 6px;"
-                                 "border: 1px solid {t['input_border']};")
+                                 f"background: white; border-radius: 6px;"
+                                 f"border: 1px solid {t['input_border']};")
         dance_info.setWordWrap(True)
         layout.addWidget(dance_info)
 
@@ -432,8 +453,10 @@ class DanceMixin:
                 background: #F5F5F5;
             }
         """)
+        played = [False]
         btn_play.clicked.connect(
-            lambda: self._on_saved_play(dialog, current_idx, dances))
+            lambda: (list.__setitem__(played, 0, True),
+                     self._on_saved_play(dialog, current_idx, dances)))
         btn_delete.clicked.connect(
             lambda: self._on_saved_delete(dialog, current_idx, dances, update_display))
         btn_back.clicked.connect(dialog.reject)
@@ -452,6 +475,7 @@ class DanceMixin:
             y = screen.height() - dialog.height()
         dialog.move(max(0, x), max(0, y))
         dialog.exec()
+        return "played" if played[0] else "back"
 
     def _on_saved_play(self, dialog, current_idx, dances):
         idx = current_idx[0]
@@ -475,36 +499,39 @@ class DanceMixin:
     # ============================== 模式 C：自定义编舞 ==============================
 
     def _start_custom_dance(self):
-        """打开自定义编舞对话框，关闭后回到主界面。"""
+        """打开自定义编舞对话框，返回 'done' 或 'back'。"""
         t = self._theme()
         dialog = DanceCustomizeDialog(self)
         result = dialog.get_custom_dance()
-        if result:
-            action, poses, loops = result
-            if action == "play":
-                self._play_dance_sequence(poses, loops)
-            elif action == "save":
-                if not self._save_new_dance(poses, loops):
-                    return
-                d = QDialog(self)
-                d.setWindowFlags(Qt.WindowType.Dialog | Qt.WindowType.FramelessWindowHint)
-                d.setAttribute(Qt.WidgetAttribute.WA_StyledBackground)
-                d.setStyleSheet(f"QDialog {{ background: {t['bg']}; border: 2px solid {t['border']}; border-radius: 12px; }} QPushButton {{ padding: 8px 24px; border: 1px solid {t['border']}; border-radius: 6px; background: white; color: {t['btn_text']}; font-size: 13px; }} QPushButton:hover {{ background: #FFE4EC; }} QLabel {{ color: {t['label']}; font-size: 14px; }}")
-                lay = QVBoxLayout(d)
-                lay.setContentsMargins(30, 30, 30, 30)
-                lbl = QLabel("主人，女仆酱已经记住这个舞蹈啦")
-                lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-                lbl.setStyleSheet(f"font-size: 15px; color: {t['btn_text']}; font-weight: bold;")
-                lay.addWidget(lbl)
-                ok_btn = QPushButton("好的")
-                ok_btn.clicked.connect(d.accept)
-                lay.addWidget(ok_btn, alignment=Qt.AlignmentFlag.AlignCenter)
-                d.setFixedSize(300, 160)
-                pet_geo = self.frameGeometry()
-                screen = QGuiApplication.primaryScreen().size()
-                d.move(min(pet_geo.right() + 10, screen.width() - d.width()),
-                       min(pet_geo.top(), screen.height() - d.height()))
-                d.exec()
+        if not result:
+            return "back"
+        action, poses, loops = result
+        if action == "play":
+            self._play_dance_sequence(poses, loops)
+            return "done"
+        # action == "save"
+        if not self._save_new_dance(poses, loops):
+            return "back"
+        d = QDialog(self)
+        d.setWindowFlags(Qt.WindowType.Dialog | Qt.WindowType.FramelessWindowHint)
+        d.setAttribute(Qt.WidgetAttribute.WA_StyledBackground)
+        d.setStyleSheet(f"QDialog {{ background: {t['bg']}; border: 2px solid {t['border']}; border-radius: 12px; }} QPushButton {{ padding: 8px 24px; border: 1px solid {t['border']}; border-radius: 6px; background: white; color: {t['btn_text']}; font-size: 13px; }} QPushButton:hover {{ background: #FFE4EC; }} QLabel {{ color: {t['label']}; font-size: 14px; }}")
+        lay = QVBoxLayout(d)
+        lay.setContentsMargins(30, 30, 30, 30)
+        lbl = QLabel("主人，女仆酱已经记住这个舞蹈啦")
+        lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        lbl.setStyleSheet(f"font-size: 15px; color: {t['btn_text']}; font-weight: bold;")
+        lay.addWidget(lbl)
+        ok_btn = QPushButton("好的")
+        ok_btn.clicked.connect(d.accept)
+        lay.addWidget(ok_btn, alignment=Qt.AlignmentFlag.AlignCenter)
+        d.setFixedSize(300, 160)
+        pet_geo = self.frameGeometry()
+        screen = QGuiApplication.primaryScreen().size()
+        d.move(min(pet_geo.right() + 10, screen.width() - d.width()),
+               min(pet_geo.top(), screen.height() - d.height()))
+        d.exec()
+        return "done"
 
     def _save_new_dance(self, poses, loops=3):
         """保存舞蹈（含循环次数）到已保存列表（最多 3 个）。返回 True 表示已保存。"""

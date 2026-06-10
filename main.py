@@ -36,10 +36,10 @@ class DesktopPet(QWidget, DanceMixin, GameMixin, ChatMixin):
         self._reply_queue = queue.Queue()
         self._identity = "maid"
         self._setup_window()
+        self._load_config()
         self._load_images()
         self._init_state()
         self._setup_timers()
-        self._load_config()
         self._setup_ui()
 
     # ============================== 初始化 ==============================
