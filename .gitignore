@@ -29,6 +29,3 @@ MARKDOWNS/
 # 操作系统
 Thumbs.db
 .DS_Store
-
-# 配置
-config.json
