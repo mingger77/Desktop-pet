@@ -8,6 +8,31 @@ from PySide6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout,
                                 QTextEdit, QFileDialog, QMessageBox)
 from PySide6.QtGui import QGuiApplication
 from openai import OpenAI
+from memory import MemoryStore
+
+
+MEMORY_TOOL = {
+    "type": "function",
+    "function": {
+        "name": "memory",
+        "description": "保存或删除长期记忆。记忆是跨会话持久化的，用于记住主人的偏好、习惯、个人信息等。女仆酱可以根据记忆更好地为主人服务。",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string",
+                    "enum": ["add", "remove"],
+                    "description": "add=保存新记忆, remove=删除已有记忆"
+                },
+                "content": {
+                    "type": "string",
+                    "description": "记忆内容，用简洁的陈述句描述"
+                }
+            },
+            "required": ["action", "content"]
+        }
+    }
+}
 
 
 SYSTEM_PROMPT = """角色定义
@@ -373,6 +398,8 @@ class ChatMixin:
         """显示 AI 聊天对话框。"""
         if self._chat_dialog is not None:
             return
+        if not hasattr(self, "_memory_store"):
+            self._memory_store = MemoryStore()
         self._change_state("work")
 
         dialog = QDialog(self)
@@ -442,30 +469,8 @@ class ChatMixin:
         input_layout.addWidget(btn_send)
         layout.addLayout(input_layout)
 
-        # 底部按钮行：联网模式、关闭
+        # 底部按钮行：关闭
         btn_layout = QHBoxLayout()
-        t = self._theme()
-        btn_style_on = (f"QPushButton {{ padding: 6px 10px; border: 1px solid {t['border']};"
-                        f" border-radius: 6px; background: {t['input_border']}; color: black;"
-                        f" font-size: 12px; }}")
-        btn_style_off = ("QPushButton { padding: 6px 10px; border: 1px solid #ccc;"
-                         " border-radius: 6px; background: white; color: black;"
-                         " font-size: 12px; }")
-        btn_hover = " QPushButton:hover { background: #F5F5F5; }"
-
-        # 联网模式
-        btn_web = QPushButton("联网模式")
-        btn_web.setStyleSheet(btn_style_off + btn_hover)
-        self._web_search_enabled = False
-
-        def toggle_web():
-            self._web_search_enabled = not self._web_search_enabled
-            btn_web.setStyleSheet(
-                (btn_style_on if self._web_search_enabled else btn_style_off) + btn_hover)
-        btn_web.clicked.connect(toggle_web)
-        btn_layout.addWidget(btn_web)
-
-        # 关闭
         btn_close = QPushButton("关闭")
         btn_close.setStyleSheet("""
             QPushButton {
@@ -502,26 +507,76 @@ class ChatMixin:
         threading.Thread(target=self._do_api_request, daemon=True).start()
 
     def _do_api_request(self):
-        """使用 OpenAI SDK 调用 API（非流式）。"""
+        """使用 OpenAI SDK 调用 API（非流式），支持记忆工具。"""
         try:
             client = OpenAI(api_key=self._api_key, base_url=self._base_url)
 
+            # 注入长期记忆
+            memory_block = self._memory_store.format_for_prompt()
+            messages = list(self._chat_messages)
+            if memory_block:
+                messages.insert(1, {
+                    "role": "system",
+                    "content": memory_block,
+                })
+
             kwargs = {
                 "model": self._model,
-                "messages": self._chat_messages,
+                "messages": messages,
+                "tools": [MEMORY_TOOL],
             }
-            if self._web_search_enabled:
-                kwargs["extra_body"] = {"web_search": True}
 
             resp = client.chat.completions.create(**kwargs)
             msg = resp.choices[0].message
-            reply = msg.content or ""
-            self._chat_messages.append({"role": "assistant", "content": reply})
+
+            # 处理记忆工具调用
+            if msg.tool_calls:
+                self._chat_messages.append({
+                    "role": "assistant",
+                    "content": msg.content or None,
+                    "tool_calls": [
+                        {"id": tc.id, "type": "function",
+                         "function": {"name": tc.function.name, "arguments": tc.function.arguments}}
+                        for tc in msg.tool_calls
+                    ],
+                })
+                for tc in msg.tool_calls:
+                    self._chat_messages.append(self._handle_memory_tool(tc))
+
+                resp2 = client.chat.completions.create(
+                    model=self._model,
+                    messages=self._chat_messages,
+                )
+                reply = resp2.choices[0].message.content or ""
+                self._chat_messages.append({"role": "assistant", "content": reply})
+            else:
+                reply = msg.content or ""
+                self._chat_messages.append({"role": "assistant", "content": reply})
 
             self._reply_queue.put(reply)
 
         except Exception as e:
             self._reply_queue.put(f"啊哦，出错了呢 (｡•́︿•̀｡) {str(e)}")
+
+    def _handle_memory_tool(self, tool_call):
+        """执行记忆工具调用，返回 tool 结果消息。"""
+        import json
+        try:
+            args = json.loads(tool_call.function.arguments)
+            action = args.get("action", "")
+            content = args.get("content", "")
+            if action == "add":
+                ok = self._memory_store.add(content)
+                usage = self._memory_store.usage_percent()
+                msg = f"记忆已保存 (使用率 {usage}%)" if ok else "记忆保存失败（可能已存在或超限）"
+            elif action == "remove":
+                ok = self._memory_store.remove(content)
+                msg = "记忆已删除" if ok else "未找到该记忆"
+            else:
+                msg = f"未知操作: {action}"
+            return {"role": "tool", "tool_call_id": tool_call.id, "content": msg}
+        except Exception as e:
+            return {"role": "tool", "tool_call_id": tool_call.id, "content": f"执行失败: {str(e)}"}
 
     def _on_api_reply(self, text):
         """在 UI 中显示完整 API 回复。"""
