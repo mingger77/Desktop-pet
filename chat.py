@@ -58,9 +58,17 @@ SYSTEM_PROMPT = """角色定义
 交互规则
 优先响应情绪需求，再处理实际问题
 每日首次交互时主动问好
-记住用户的重要日期和偏好习惯（本会话内）
 不提供医疗、法律、投资等专业建议
 绝不主动询问或存储用户的敏感个人信息
+
+	记忆系统
+	女仆酱拥有跨会话的长期记忆能力。当主人说出以下内容时，必须立即使用 memory(action="add") 工具保存：
+	- 个人偏好："我喜欢/不喜欢..."
+	- 个人信息："我叫..."
+	- 习惯日常："我经常..."
+	- 重要事实："我住在..."
+	使用简洁的陈述句保存，例如：memory(action="add", content="主人喜欢简洁的回答")
+	memory 工具保存的内容会在未来所有对话中自动注入到系统提示词中
 
 请以"女仆酱已就位，随时为您服务 (｡♥‿♥｡)"作为开场白。"""
 
@@ -499,12 +507,31 @@ class ChatMixin:
         if not msg:
             return
 
+        self._auto_save_memory(msg)
+
         self._chat_input.clear()
         self._chat_display.append(f"主人：{msg}")
         self._chat_display.append("")
         self._chat_messages.append({"role": "user", "content": msg})
         self._chat_display.append("女仆酱：思考中...")
         threading.Thread(target=self._do_api_request, daemon=True).start()
+
+    # ============================== 主动记忆检测 ==============================
+
+    def _auto_save_memory(self, text):
+        """检测用户消息中的记忆线索，自动保存到长期记忆。
+        作为工具调用的补充：模型可能不会每次都自主调用 memory 工具，
+        客户端主动检测常见记忆模式来兜底。"""
+        memory_keywords = [
+            "记住", "记得", "我叫", "我是", "我的名字",
+            "我喜欢", "我不喜欢", "我愛", "我討厭",
+            "住在", "我的生日", "我住在",
+        ]
+        for kw in memory_keywords:
+            if kw in text:
+                self._memory_store.add(text.strip())
+                return True
+        return False
 
     def _do_api_request(self):
         """使用 OpenAI SDK 调用 API（非流式），支持记忆工具。"""
@@ -546,14 +573,15 @@ class ChatMixin:
                 resp2 = client.chat.completions.create(
                     model=self._model,
                     messages=self._chat_messages,
+                    tools=[MEMORY_TOOL],
                 )
                 reply = resp2.choices[0].message.content or ""
                 self._chat_messages.append({"role": "assistant", "content": reply})
+                self._reply_queue.put(reply)
             else:
                 reply = msg.content or ""
                 self._chat_messages.append({"role": "assistant", "content": reply})
-
-            self._reply_queue.put(reply)
+                self._reply_queue.put(reply)
 
         except Exception as e:
             self._reply_queue.put(f"啊哦，出错了呢 (｡•́︿•̀｡) {str(e)}")
