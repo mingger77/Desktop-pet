@@ -2,6 +2,21 @@
 
 基于 PySide6 的桌面宠物应用。无边框透明置顶窗口，使用 PNG 精灵图展示女仆/猫娘角色，通过状态机驱动交互和动画。
 
+---
+
+## 版本
+
+**当前版本：v1.0.1** · 2026-06-21
+
+- 新增：正式打包为 Windows 安装程序，支持系统注册表安装与卸载
+- 改进：优化菜单退出逻辑，跳舞动作随机生成更自然（3~6 步，循环 2~4 次）
+- 界面：配套主题色随身份自动切换（女仆/猫娘）
+- 移除：砍掉 Office 文件读写功能，聚焦核心交互
+
+完整的版本演进记录见 [`upgrade_log.md`](./upgrade_log.md)
+
+---
+
 ## 项目结构
 
 ```
@@ -21,6 +36,8 @@ Desktop pet/
 ├── CLAUDE.md               # Claude Code 项目指引
 └── requirements.txt        # Python 依赖
 ```
+
+---
 
 ## 功能
 
@@ -51,33 +68,39 @@ Desktop pet/
 - 配套主题色自动切换（粉 / 灰）
 - 身份持久化到配置文件
 
-## 运行
+---
 
-```bash
-# 从源码运行
-.venv/Scripts/python src/main.py
+## 下载与安装
 
-# 打包为独立 exe
-.venv/Scripts/python -m nuitka src/main.py \
-    --standalone \
-    --enable-plugin=pyside6 \
-    --include-data-dir=src/images=images \
-    --include-data-file=src/config.json=config.json \
-    --windows-icon-from-ico=src/images/cyber_maid.ico \
-    --windows-console-mode=disable \
-    --output-dir=dist \
-    --product-name=DesktopPet \
-    --file-version=1.0.0 \
-    --msvc=latest
-```
+### 方式一：一键安装（推荐）
 
-打包后双击 `dist/main.dist/main.exe` 即可运行。
+从 [Releases 页面](https://github.com/mingger77/Desktop-pet/releases) 下载 `赛博女仆_Setup.exe`，双击运行，按提示完成安装。
+
+安装后可在 Windows 开始菜单或应用列表中找到“赛博女仆”。
+
+### 方式二：便携压缩包
+
+从 [Releases 页面](https://github.com/mingger77/Desktop-pet/releases) 下载 `Desktop-pet.zip`，解压后双击 `main.exe` 即可运行，无需安装。
+
+---
+
+## 首次使用
+
+1. 启动程序后，右键点击女仆打开功能菜单。
+2. 进入 **“设置”** → **“聊天配置”**，填入你的 API Key 和 Base URL（内置 DeepSeek 配置引导）。
+3. 保存后即可开始聊天，女仆会记住你的偏好和习惯。
+
+> 提示：如果不使用 AI 聊天功能，女仆的基础交互（换装、跳舞、猜拳、拖拽、点击反应）均可离线使用。
+
+---
 
 ## 依赖
 
 - PySide6 >= 6.11 — GUI 框架
 - openai >= 2.41.0 — AI 聊天 SDK
 - Nuitka（可选）— exe 打包
+
+---
 
 ## 开发说明
 
@@ -91,8 +114,19 @@ DesktopPet(QWidget, DanceMixin, GameMixin, ChatMixin)
 └── MemoryStore → memory.py（记忆存储）
 ```
 
+
+如果你希望从源码运行或自行打包：
+
+1. 创建虚拟环境：`python -m venv .venv`
+2. 安装依赖：`.venv/Scripts/python -m pip install -r requirements.txt`
+3. 运行：`.venv/Scripts/python src/main.py`
+4. 打包（需要 Nuitka）：参考 `CLAUDE.md` 中的打包命令
+
+---
+
 ## 鸣谢
 
-- 本项目由 Claude Code 辅助完成，Claude Code 承担了代码编写、架构设计、Bug 修复等大量工作，是名副其实的"赛博工友"
-- 长期记忆系统的设计参考了 Nous Research 开源的 Hermes Agent 项目的记忆架构，特此致谢
-- 项目中的精灵图由 GPT-image-2 生成，在此表示感谢
+- **Claude Code**：我的赛博工友。代码编写、架构设计、Bug 修复……它是这个项目中从不喊累的那一半。
+- **Hermes Agent (Nous Research)**：长期记忆系统的设计从 Hermes 的记忆架构中获得了关键启发，特此致谢。
+- **GPT-image-2**：项目中的角色精灵图由 GPT-image-2 生成。
+- **ifThink404**：你赠予我的那颗 star，是这个项目收到的第一份来自陌生人的认可。它让我相信，赛博女仆值得被继续做下去。
