@@ -115,22 +115,38 @@ class ChatMixin:
     """AI 聊天与配置管理混入类。"""
 
     _CONFIG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.json")
+    _ENV_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "env")
 
     # ============================== 配置管理 ==============================
 
     def _load_config(self):
-        """加载 API 配置，文件不存在时创建默认配置。"""
+        """加载配置：env 读取 API 信息，config.json 读取身份。"""
+        # 从 env 读取敏感配置
         self._api_key = ""
         self._base_url = "https://api.deepseek.com"
         self._model = "deepseek-v4-flash"
+        if os.path.exists(self._ENV_FILE):
+            try:
+                with open(self._ENV_FILE, "r", encoding="utf-8") as f:
+                    for line in f:
+                        line = line.strip()
+                        if "=" in line:
+                            k, v = line.split("=", 1)
+                            if k == "api_key":
+                                self._api_key = v
+                            elif k == "base_url":
+                                self._base_url = v
+                            elif k == "model":
+                                self._model = v
+            except OSError:
+                pass
+
+        # 从 config.json 读取非敏感配置
         self._identity = "maid"
         if os.path.exists(self._CONFIG_FILE):
             try:
                 with open(self._CONFIG_FILE, "r", encoding="utf-8") as f:
                     data = json.load(f)
-                self._api_key = data.get("api_key", "")
-                self._base_url = data.get("base_url", self._base_url)
-                self._model = data.get("model", self._model)
                 self._identity = data.get("identity", "maid")
             except (json.JSONDecodeError, OSError):
                 pass
@@ -138,15 +154,22 @@ class ChatMixin:
             self._save_config()
 
     def _save_config(self):
-        """保存 API 配置到文件。"""
+        """保存身份到 config.json（API 信息直接写 env）。"""
         try:
             with open(self._CONFIG_FILE, "w", encoding="utf-8") as f:
                 json.dump({
-                    "api_key": self._api_key,
-                    "base_url": self._base_url,
-                    "model": self._model,
                     "identity": self._identity,
                 }, f, indent=2)
+        except OSError:
+            pass
+
+    def _save_env(self):
+        """保存 API 配置到 env 文件。"""
+        try:
+            with open(self._ENV_FILE, "w", encoding="utf-8") as f:
+                f.write(f"api_key={self._api_key}\n")
+                f.write(f"model={self._model}\n")
+                f.write(f"base_url={self._base_url}\n")
         except OSError:
             pass
 
@@ -388,6 +411,7 @@ class ChatMixin:
         if model:
             self._model = model
         self._save_config()
+        self._save_env()
         dialog.accept()
         if api_key_ok:
             QTimer.singleShot(200, self._show_chat_dialog)

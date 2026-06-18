@@ -13,13 +13,16 @@ pet_env/
 *.build/
 *.dist/
 *.exe
+desktop-pet/
+
+# 成品
+*.cyber_maid
 
 # API 密钥配置（含敏感信息）
 src/env
 
 # 项目文档（本地记录，不上传）
 MARKDOWNS/
-CLAUDE.md
 
 # 编辑器/IDE
 .vscode/

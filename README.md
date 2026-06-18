@@ -12,7 +12,8 @@ Desktop pet/
 │   ├── dance.py            # 跳舞功能（3 种模式）
 │   ├── game.py             # 石头剪刀布游戏
 │   ├── memory.py           # 长期记忆持久化存储
-│   └── config.json         # 配置文件（API Key / 身份 / 舞蹈数据）
+│   ├── config.json         # 非敏感配置（身份 / 舞蹈数据，可上传）
+│   └── env                 # 敏感配置（API Key / Model / URL，不上传）
 ├── images/                 # 精灵图（maid + catgirl 各 18 张）
 ├── dist/                   # Nuitka 打包输出
 ├── .venv/                  # Python 虚拟环境
@@ -93,3 +94,4 @@ DesktopPet(QWidget, DanceMixin, GameMixin, ChatMixin)
 
 - 本项目由 Claude Code 辅助完成，Claude Code 承担了代码编写、架构设计、Bug 修复等大量工作，是名副其实的"赛博工友"
 - 长期记忆系统的设计参考了 Nous Research 开源的 Hermes Agent 项目的记忆架构，特此致谢
+- 项目中的精灵图由 GPT-image-2 生成，在此表示感谢

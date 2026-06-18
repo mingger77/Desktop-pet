@@ -1,29 +1,3 @@
 {
-  "api_key": "sk-42a09dbf2ac343559d5f44e42ef5ecbb",
-  "base_url": "https://api.deepseek.com",
-  "model": "deepseek-v4-flash",
-  "output_dir": "D:/\u684c\u9762/projects/files",
-  "saved_dances": [
-    {
-      "poses": [
-        "dance2",
-        "dance3",
-        "dance4",
-        "dance5"
-      ],
-      "loops": 3
-    },
-    {
-      "poses": [
-        "dance1",
-        "dance2",
-        "dance3",
-        "dance4",
-        "dance5",
-        "dance6"
-      ],
-      "loops": 4
-    }
-  ],
   "identity": "maid"
 }
