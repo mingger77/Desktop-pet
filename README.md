@@ -14,7 +14,7 @@ Desktop pet/
 │   ├── memory.py           # 长期记忆持久化存储
 │   ├── config.json         # 非敏感配置（身份 / 舞蹈数据，可上传）
 │   └── env                 # 敏感配置（API Key / Model / URL，不上传）
-├── images/                 # 精灵图（maid + catgirl 各 18 张）
+│   └── images/             # 精灵图（maid + catgirl 各 18 张）
 ├── dist/                   # Nuitka 打包输出
 ├── .venv/                  # Python 虚拟环境
 ├── .gitignore
@@ -61,8 +61,9 @@ Desktop pet/
 .venv/Scripts/python -m nuitka src/main.py \
     --standalone \
     --enable-plugin=pyside6 \
-    --include-data-dir=images=images \
+    --include-data-dir=src/images=images \
     --include-data-file=src/config.json=config.json \
+    --windows-icon-from-ico=src/images/cyber_maid.ico \
     --windows-console-mode=disable \
     --output-dir=dist \
     --product-name=DesktopPet \

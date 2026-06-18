@@ -60,7 +60,7 @@ class DesktopPet(QWidget, DanceMixin, GameMixin, ChatMixin):
 
     def _load_images(self):
         """按当前身份从 ./images/ 加载精灵图到 self.images 字典。"""
-        img_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "images")
+        img_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "images")
         self.images = {}
 
         if not os.path.isdir(img_dir):
