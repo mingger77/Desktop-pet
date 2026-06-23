@@ -6,12 +6,12 @@
 
 ## 版本
 
-**当前版本：v1.0.1** · 2026-06-21
+**当前版本：v1.1.0** · 2026-06-28
 
-- 新增：正式打包为 Windows 安装程序，支持系统注册表安装与卸载
-- 改进：优化菜单退出逻辑，跳舞动作随机生成更自然（3~6 步，循环 2~4 次）
-- 界面：配套主题色随身份自动切换（女仆/猫娘）
-- 移除：砍掉 Office 文件读写功能，聚焦核心交互
+- 修复：聊天记录无界增长导致的内存泄漏问题
+- 修复：频繁跳舞/换装时 QMenu/QDialog 对象累积不释放
+- 优化：预加载双身份精灵图，换装瞬时完成无 GDI 内存抖动
+- 重命名：将主文件名字由 `main.py` 改为 `cyber-maid.py`
 
 完整的版本演进记录见 [`upgrade_log.md`](./upgrade_log.md)
 
@@ -22,7 +22,7 @@
 ```
 Desktop pet/
 ├── src/                    # 源代码
-│   ├── main.py             # 核心 + 状态机 + 事件 + 绘制
+│   ├── cyber-maid.py       # 核心 + 状态机 + 事件 + 绘制
 │   ├── chat.py             # AI 聊天 + 配置管理 + OpenAI SDK 集成
 │   ├── dance.py            # 跳舞功能（3 种模式）
 │   ├── game.py             # 石头剪刀布游戏
@@ -119,7 +119,7 @@ DesktopPet(QWidget, DanceMixin, GameMixin, ChatMixin)
 
 1. 创建虚拟环境：`python -m venv .venv`
 2. 安装依赖：`.venv/Scripts/python -m pip install -r requirements.txt`
-3. 运行：`.venv/Scripts/python src/main.py`
+3. 运行：`.venv/Scripts/python src/cyber-maid.py`
 4. 打包（需要 Nuitka）：参考 `CLAUDE.md` 中的打包命令
 
 ---

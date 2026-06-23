@@ -37,7 +37,7 @@ class DesktopPet(QWidget, DanceMixin, GameMixin, ChatMixin):
         self._identity = "maid"
         self._setup_window()
         self._load_config()
-        self._load_images()
+        self._load_all_images()
         self._init_state()
         self._setup_timers()
         self._setup_ui()
@@ -58,29 +58,32 @@ class DesktopPet(QWidget, DanceMixin, GameMixin, ChatMixin):
         self._drag_offset = QPoint()
         self._press_pos = None
 
-    def _load_images(self):
-        """按当前身份从 ./images/ 加载精灵图到 self.images 字典。"""
+    def _load_all_images(self):
+        """预加载 maid 和 catgirl 两组精灵图，换装时仅做指针交换。"""
         img_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "images")
-        self.images = {}
+        self._all_images = {}
 
         if not os.path.isdir(img_dir):
             raise FileNotFoundError(f"图片目录不存在: {img_dir}")
 
-        prefix = self._identity + "--"
-        loaded = 0
-        for fname in os.listdir(img_dir):
-            if not fname.endswith(".png") or not fname.startswith(prefix):
-                continue
-            stem = fname.rsplit(".", 1)[0]
-            state = stem.split("--", 1)[1]
-            pixmap = QPixmap(os.path.join(img_dir, fname))
-            if pixmap.isNull():
-                continue
-            self.images[state] = pixmap
-            loaded += 1
+        for identity in ("maid", "catgirl"):
+            prefix = identity + "--"
+            images = {}
+            for fname in os.listdir(img_dir):
+                if not fname.endswith(".png") or not fname.startswith(prefix):
+                    continue
+                stem = fname.rsplit(".", 1)[0]
+                state = stem.split("--", 1)[1]
+                pixmap = QPixmap(os.path.join(img_dir, fname))
+                if pixmap.isNull():
+                    continue
+                images[state] = pixmap
+            self._all_images[identity] = images
 
-        if loaded == 0:
+        if not self._all_images.get("maid") and not self._all_images.get("catgirl"):
             raise RuntimeError("未找到任何有效的 PNG 精灵图。")
+
+        self.images = self._all_images.get(self._identity, self._all_images["maid"])
 
     def _init_state(self):
         """初始状态为 stand，窗口大小按 stand 图片调整。"""
@@ -253,6 +256,7 @@ class DesktopPet(QWidget, DanceMixin, GameMixin, ChatMixin):
                 act_chat.setEnabled(False)
 
             action = menu.exec(event.globalPos())
+            menu.deleteLater()
             if action == act_exit:
                 QApplication.quit()
                 break
@@ -274,7 +278,7 @@ class DesktopPet(QWidget, DanceMixin, GameMixin, ChatMixin):
     # ============================== 换装 ==============================
 
     def _switch_identity(self):
-        """切换女仆/猫娘身份，重载图片并保存配置。"""
+        """切换女仆/猫娘身份，仅做指针交换并保存配置。"""
         self._identity = "catgirl" if self._identity == "maid" else "maid"
         try:
             with open(self._CONFIG_FILE, "r", encoding="utf-8") as f:
@@ -284,7 +288,7 @@ class DesktopPet(QWidget, DanceMixin, GameMixin, ChatMixin):
                 json.dump(config, f, indent=2)
         except OSError:
             pass
-        self._load_images()
+        self.images = self._all_images[self._identity]
         self._init_state()
         self.update()
 

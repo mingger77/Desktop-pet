@@ -280,6 +280,7 @@ class DanceMixin:
         while True:
             dialog = DanceSelectorDialog(self)
             choice = dialog.get_choice()
+            dialog.deleteLater()
             if choice is None:   # 返回 → 退出跳舞
                 break
             if choice == "random":
@@ -355,6 +356,7 @@ class DanceMixin:
                 y = screen.height() - dialog.height()
             dialog.move(max(0, x), max(0, y))
             dialog.exec()
+            dialog.deleteLater()
             return "back"
 
         current_idx = [0]
@@ -475,6 +477,7 @@ class DanceMixin:
             y = screen.height() - dialog.height()
         dialog.move(max(0, x), max(0, y))
         dialog.exec()
+        dialog.deleteLater()
         return "played" if played[0] else "back"
 
     def _on_saved_play(self, dialog, current_idx, dances):
@@ -503,6 +506,7 @@ class DanceMixin:
         t = self._theme()
         dialog = DanceCustomizeDialog(self)
         result = dialog.get_custom_dance()
+        dialog.deleteLater()
         if not result:
             return "back"
         action, poses, loops = result
@@ -531,6 +535,7 @@ class DanceMixin:
         d.move(min(pet_geo.right() + 10, screen.width() - d.width()),
                min(pet_geo.top(), screen.height() - d.height()))
         d.exec()
+        d.deleteLater()
         return "done"
 
     def _save_new_dance(self, poses, loops=3):
@@ -589,6 +594,7 @@ class DanceMixin:
             btn_yes.clicked.connect(lambda: (list.__setitem__(result, 0, True), dialog.accept()))
             btn_no.clicked.connect(dialog.reject)
             dialog.exec()
+            dialog.deleteLater()
 
             if not result[0]:
                 return False  # 不了吧 → 放弃保存

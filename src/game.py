@@ -95,6 +95,7 @@ class GameMixin:
         x, y = self._pet_side_pos(dialog)
         dialog.move(x, y)
         dialog.exec()
+        dialog.deleteLater()
 
     def _on_player_choice(self, player_choice, dialog):
         """玩家做出选择：宠物随机出拳并展示 1.5 秒，对话框保持打开。"""

@@ -15,8 +15,8 @@ pet_env/
 *.exe
 desktop-pet/
 
-# 成品
-*.cyber_maid
+# 临时文件
+temp/
 
 # API 密钥配置（含敏感信息）
 src/env

@@ -527,6 +527,13 @@ class ChatMixin:
         dialog.move(x, y)
         dialog.show()
 
+    def _trim_chat_messages(self, max_messages=50):
+        """裁剪聊天记录，防止无界增长。保留系统提示 + 最近 N 条消息。"""
+        if len(self._chat_messages) > max_messages:
+            system = self._chat_messages[:1]
+            recent = self._chat_messages[-(max_messages - 1):]
+            self._chat_messages = system + recent
+
     def _send_message(self):
         """发送用户消息并调用 API。"""
         msg = self._chat_input.text().strip()
@@ -534,6 +541,7 @@ class ChatMixin:
             return
 
         self._auto_save_memory(msg)
+        self._trim_chat_messages()
 
         self._chat_input.clear()
         self._chat_display.append(f"主人：{msg}")
