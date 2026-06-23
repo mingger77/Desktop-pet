@@ -14,6 +14,7 @@ pet_env/
 *.dist/
 *.exe
 desktop-pet/
+dist/
 
 # 临时文件
 temp/

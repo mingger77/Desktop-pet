@@ -7,10 +7,10 @@ from PySide6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout,
                                 QMessageBox)
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QGuiApplication
-from chat import _THEMES
+from chat import _THEMES, _DATA_DIR
 
 
-_CONFIG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.json")
+_CONFIG_FILE = os.path.join(_DATA_DIR, "config.json")
 
 
 class DanceSelectorDialog(QDialog):
@@ -654,9 +654,14 @@ class DanceMixin:
 
     def _save_saved_dances(self, dances):
         try:
-            with open(_CONFIG_FILE, "r", encoding="utf-8") as f:
-                data = json.load(f)
+            os.makedirs(os.path.dirname(_CONFIG_FILE), exist_ok=True)
+            try:
+                with open(_CONFIG_FILE, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+            except (OSError, json.JSONDecodeError):
+                data = {}
             data["saved_dances"] = dances
+            data["identity"] = data.get("identity", "maid")
             with open(_CONFIG_FILE, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=2)
         except OSError:
