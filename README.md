@@ -12,7 +12,6 @@
 - 修复：频繁跳舞/换装时 QMenu/QDialog 对象累积不释放
 - 优化：预加载双身份精灵图，换装瞬时完成无 GDI 内存抖动
 - 重命名：将主文件名字由 `main.py` 改为 `cyber-maid.py`
-- 修复：安装版运行时无法写入配置文件（自动重定向至 `%APPDATA%\DesktopPet\`）
 
 完整的版本演进记录见 [`upgrade_log.md`](./upgrade_log.md)
 
@@ -29,8 +28,7 @@ Desktop pet/
 │   ├── game.py             # 石头剪刀布游戏
 │   ├── memory.py           # 长期记忆持久化存储
 │   ├── config.json         # 非敏感配置（身份 / 舞蹈数据，可上传）
-│   ├── env                 # 敏感配置（API Key / Model / URL，不上传）
-│   ├── memory.md           # 长期记忆持久化文件
+│   └── env                 # 敏感配置（API Key / Model / URL，不上传）
 │   └── images/             # 精灵图（maid + catgirl 各 18 张）
 ├── dist/                   # Nuitka 打包输出
 ├── .venv/                  # Python 虚拟环境
@@ -76,13 +74,13 @@ Desktop pet/
 
 ### 方式一：一键安装（推荐）
 
-从 [Releases 页面](https://github.com/mingger77/Desktop-pet/releases) 下载 `赛博女仆_Setup.exe`，双击运行，按提示完成安装。
+从 [Releases 页面](https://github.com/mingger77/Desktop-pet/releases) 下载 `cyber-maid-installer.exe`，双击运行，按提示完成安装。
 
 安装后可在 Windows 开始菜单或应用列表中找到“赛博女仆”。
 
 ### 方式二：便携压缩包
 
-从 [Releases 页面](https://github.com/mingger77/Desktop-pet/releases) 下载 `Desktop-pet.zip`，解压后双击 `main.exe` 即可运行，无需安装。
+从 [Releases 页面](https://github.com/mingger77/Desktop-pet/releases) 下载 `cyber-maid.zip`，解压后双击 `cyber-maid.exe` 即可运行，无需安装。
 
 ---
 
@@ -91,8 +89,6 @@ Desktop pet/
 1. 启动程序后，右键点击女仆打开功能菜单。
 2. 进入 **“设置”** → **“聊天配置”**，填入你的 API Key 和 Base URL（内置 DeepSeek 配置引导）。
 3. 保存后即可开始聊天，女仆会记住你的偏好和习惯。
-
-> 安装版数据存储位置：`%APPDATA%\DesktopPet\`（含 config.json、env、memory.md），清除数据或重装时请留意此目录。
 
 > 提示：如果不使用 AI 聊天功能，女仆的基础交互（换装、跳舞、猜拳、拖拽、点击反应）均可离线使用。
 

@@ -1,24 +1,13 @@
 """长期记忆存储层：基于文件的持久化记忆系统。"""
 
 import os
-import sys
 import tempfile
-
-
-def _get_data_dir():
-    """编译版使用 APPDATA，源码版使用本地目录。"""
-    if getattr(sys, "frozen", False):
-        return os.path.join(os.environ.get("APPDATA", os.path.expanduser("~")), "DesktopPet")
-    return os.path.dirname(os.path.abspath(__file__))
-
-
-_DATA_DIR = _get_data_dir()
 
 
 class MemoryStore:
     """管理 memory.md 文件的读写，支持条目级增删。"""
 
-    MEMORY_FILE = os.path.join(_DATA_DIR, "memory.md")
+    MEMORY_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "memory.md")
     CHAR_LIMIT = 2200
     SEPARATOR = "\n§\n"
 
@@ -39,7 +28,6 @@ class MemoryStore:
 
     def save(self, entries):
         """原子写入：临时文件 → os.replace，防止写入中途崩溃。"""
-        os.makedirs(os.path.dirname(self.MEMORY_FILE), exist_ok=True)
         content = self.SEPARATOR.join(entries)
         fd, tmp = tempfile.mkstemp(
             suffix=".tmp",

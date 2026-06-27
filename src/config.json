@@ -1,3 +1,16 @@
 {
-  "identity": "maid"
+  "identity": "maid",
+  "saved_dances": [
+    {
+      "poses": [
+        "dance1",
+        "dance2",
+        "dance3",
+        "dance4",
+        "dance5",
+        "dance6"
+      ],
+      "loops": 3
+    }
+  ]
 }

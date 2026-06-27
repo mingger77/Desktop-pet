@@ -1,5 +1,4 @@
 import os
-import sys
 import json
 import queue
 import threading
@@ -10,16 +9,6 @@ from PySide6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout,
 from PySide6.QtGui import QGuiApplication
 from openai import OpenAI
 from memory import MemoryStore
-
-
-def _get_data_dir():
-    """编译版使用 APPDATA，源码版使用本地目录。"""
-    if getattr(sys, "frozen", False):
-        return os.path.join(os.environ.get("APPDATA", os.path.expanduser("~")), "DesktopPet")
-    return os.path.dirname(os.path.abspath(__file__))
-
-
-_DATA_DIR = _get_data_dir()
 
 
 MEMORY_TOOL = {
@@ -125,8 +114,8 @@ _TUTORIAL_PAGES = [
 class ChatMixin:
     """AI 聊天与配置管理混入类。"""
 
-    _CONFIG_FILE = os.path.join(_DATA_DIR, "config.json")
-    _ENV_FILE = os.path.join(_DATA_DIR, "env")
+    _CONFIG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.json")
+    _ENV_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "env")
 
     # ============================== 配置管理 ==============================
 
@@ -167,7 +156,6 @@ class ChatMixin:
     def _save_config(self):
         """保存身份到 config.json（API 信息直接写 env）。"""
         try:
-            os.makedirs(_DATA_DIR, exist_ok=True)
             with open(self._CONFIG_FILE, "w", encoding="utf-8") as f:
                 json.dump({
                     "identity": self._identity,
@@ -178,7 +166,6 @@ class ChatMixin:
     def _save_env(self):
         """保存 API 配置到 env 文件。"""
         try:
-            os.makedirs(_DATA_DIR, exist_ok=True)
             with open(self._ENV_FILE, "w", encoding="utf-8") as f:
                 f.write(f"api_key={self._api_key}\n")
                 f.write(f"model={self._model}\n")

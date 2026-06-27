@@ -281,7 +281,6 @@ class DesktopPet(QWidget, DanceMixin, GameMixin, ChatMixin):
         """切换女仆/猫娘身份，仅做指针交换并保存配置。"""
         self._identity = "catgirl" if self._identity == "maid" else "maid"
         try:
-            os.makedirs(os.path.dirname(self._CONFIG_FILE), exist_ok=True)
             with open(self._CONFIG_FILE, "r", encoding="utf-8") as f:
                 config = json.load(f)
             config["identity"] = self._identity
